@@ -142,3 +142,13 @@ builder.Services.AddHostedService<QueuedHostedService>();
 using ManageAdmin.GraphQL.Infrastructure.Background;private readonly DataBase dataBase;
 private readonly RequestQueryBuilder queryBuilder;
 private readonly IBackgroundTaskQueue taskQueue; ió
+
+public RequestServices(
+    DataBase dataBase,
+    RequestQueryBuilder queryBuilder,
+    IBackgroundTaskQueue taskQueue)
+{
+    this.dataBase = dataBase;
+    this.queryBuilder = queryBuilder;
+    this.taskQueue = taskQueue;
+}

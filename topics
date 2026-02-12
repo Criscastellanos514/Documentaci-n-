@@ -205,3 +205,77 @@ if (success)
 }
 
 return success;
+
+
+if (success)
+{
+    taskQueue.QueueBackgroundWorkItem(async token =>
+    {
+        try
+        {
+            // 1) entity_id de "Request Approval"
+            var entityId = await dataBase.Connection.QueryFirstAsync<Guid>(@"
+                SELECT TOP 1 entity_id
+                FROM entities
+                WHERE entity_name = 'Request Approval'
+            ");
+
+            // 2) state_id de "Pendiente"
+            var stateId = await dataBase.Connection.QueryFirstAsync<Guid>(@"
+                SELECT TOP 1 state_id
+                FROM states
+                WHERE state_name = 'Pendiente'
+            ");
+
+            // 3) state_entity_id (Pendiente + Request Approval)
+            var stateEntityId = await dataBase.Connection.QueryFirstAsync<Guid>(@"
+                SELECT TOP 1 state_entity_id
+                FROM state_entities
+                WHERE entity_id = @entityId AND state_id = @stateId
+            ", new { entityId, stateId });
+
+            // 4) Insert automático en request_approvals
+            await dataBase.Connection.ExecuteAsync(@"
+                INSERT INTO request_approvals
+                (
+                    request_approval_id,
+                    request_id,
+                    user_id,
+                    state_entity_id,
+                    request_approval_type,
+                    approval_date,
+                    create_at,
+                    modify_at
+                )
+                VALUES
+                (
+                    @request_approval_id,
+                    @request_id,
+                    @user_id,
+                    @state_entity_id,
+                    @request_approval_type,
+                    @approval_date,
+                    @create_at,
+                    @modify_at
+                )
+            ",
+            new
+            {
+                request_approval_id = Guid.NewGuid(),
+                request_id = request.request_id,
+                user_id = request.user_id,
+                state_entity_id = stateEntityId,
+                request_approval_type = "AUTO",
+                approval_date = DateTime.UtcNow,
+                create_at = DateTime.UtcNow,
+                modify_at = DateTime.UtcNow
+            });
+
+            Console.WriteLine("✔ Aprobación automática creada (Pendiente)");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error en background approval: {ex.Message}");
+        }
+    });
+}

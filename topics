@@ -138,3 +138,7 @@ namespace ManageAdmin.GraphQL.Infrastructure.Background
 
 builder.Services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
 builder.Services.AddHostedService<QueuedHostedService>();
+
+using ManageAdmin.GraphQL.Infrastructure.Background;private readonly DataBase dataBase;
+private readonly RequestQueryBuilder queryBuilder;
+private readonly IBackgroundTaskQueue taskQueue; ió

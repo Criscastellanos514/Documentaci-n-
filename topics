@@ -152,3 +152,32 @@ public RequestServices(
     this.queryBuilder = queryBuilder;
     this.taskQueue = taskQueue;
 }
+
+var success = exec > 0;
+
+if (success)
+{
+    taskQueue.QueueBackgroundWorkItem(async token =>
+    {
+        try
+        {
+            // Simulación de proceso largo
+            await Task.Delay(2000, token);
+
+            Console.WriteLine($"Procesando request {request.request_id}");
+
+            // 🔥 AQUÍ puedes poner:
+            // - Enviar correo
+            // - Crear approval automático
+            // - Generar tareas
+            // - Validar reglas
+            // - Llamar otro servicio
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error en background: {ex.Message}");
+        }
+    });
+}
+
+return success;

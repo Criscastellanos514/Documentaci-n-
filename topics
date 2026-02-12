@@ -135,3 +135,6 @@ namespace ManageAdmin.GraphQL.Infrastructure.Background
         }
     }
 }
+
+builder.Services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
+builder.Services.AddHostedService<QueuedHostedService>();

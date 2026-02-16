@@ -218,3 +218,6 @@ ORDER BY create_at DESC");
 }
 
 Console.WriteLine("Listo.");
+
+dotnet add package Dapper
+dotnet add package Microsoft.Data.SqlClient

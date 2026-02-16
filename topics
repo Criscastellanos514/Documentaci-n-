@@ -320,3 +320,105 @@ dotnet add package Dapper
 dotnet add package Microsoft.Data.SqlClient
 dotnet add package Microsoft.Extensions.Configuration.Json
 dotnet add package Microsoft.Extensions.Hosting
+
+
+
+using Dapper;
+using RequestApprovalWorker.Data;
+
+namespace RequestApprovalWorker.Services;
+
+public class RequestApprovalService
+{
+    private readonly SqlConnectionFactory _factory;
+
+    public RequestApprovalService(SqlConnectionFactory factory)
+    {
+        _factory = factory;
+    }
+
+    public async Task<int> InsertApprovalForRequestAsync(Guid requestId, Guid userId)
+    {
+        using var conn = _factory.Create();
+        await conn.OpenAsync();
+
+        // 1) entity_id de "Request Approval"
+        var entityId = await conn.QueryFirstOrDefaultAsync<Guid?>(@"
+SELECT TOP 1 entity_id
+FROM entities
+WHERE entity_name = 'Request Approval'");
+
+        if (entityId is null)
+        {
+            Console.WriteLine("No existe entity_name = 'Request Approval' en entities.");
+            return 0;
+        }
+
+        // 2) state_id de "Pendiente"
+        var stateId = await conn.QueryFirstOrDefaultAsync<Guid?>(@"
+SELECT TOP 1 state_id
+FROM states
+WHERE state_name = 'Pendiente'");
+
+        if (stateId is null)
+        {
+            Console.WriteLine("No existe state_name = 'Pendiente' en states.");
+            return 0;
+        }
+
+        // 3) state_entity_id (Pendiente + Request Approval)
+        var stateEntityId = await conn.QueryFirstOrDefaultAsync<Guid?>(@"
+SELECT TOP 1 state_entity_id
+FROM state_entities
+WHERE entity_id = @entityId AND state_id = @stateId",
+            new { entityId, stateId });
+
+        if (stateEntityId is null)
+        {
+            Console.WriteLine("No existe state_entity_id para (Request Approval + Pendiente).");
+            return 0;
+        }
+
+        // 4) Evitar duplicar: si ya existe approval para ese request + state_entity_id
+        var exists = await conn.QueryFirstOrDefaultAsync<int>(@"
+SELECT COUNT(1)
+FROM request_approvals
+WHERE request_id = @requestId AND state_entity_id = @stateEntityId",
+            new { requestId, stateEntityId });
+
+        if (exists > 0)
+        {
+            Console.WriteLine($"Ya existe approval pendiente para request {requestId}. No inserto duplicado.");
+            return 0;
+        }
+
+        // 5) Insert
+        var rows = await conn.ExecuteAsync(@"
+INSERT INTO request_approvals
+(
+    request_approval_id,
+    request_id,
+    user_id,
+    state_entity_id,
+    request_approval_type,
+    approval_date,
+    create_at,
+    modify_at
+)
+VALUES
+(
+    NEWID(),
+    @requestId,
+    @userId,
+    @stateEntityId,
+    'AUTOMATICO',
+    GETDATE(),
+    GETDATE(),
+    GETDATE()
+)",
+            new { requestId, userId, stateEntityId });
+
+        Console.WriteLine($"✅ Insertado approval automático. Rows: {rows} | Request: {requestId}");
+        return rows;
+    }
+}

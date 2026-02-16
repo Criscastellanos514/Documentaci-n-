@@ -294,3 +294,8 @@ namespace RequestApprovalWorker
     "DryRun": false
   }
 }
+
+
+dotnet add package Dapper
+dotnet add package Microsoft.Data.SqlClient
+dotnet add package Microsoft.Extensions.Configuration.Json

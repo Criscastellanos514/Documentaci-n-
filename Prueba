@@ -202,3 +202,14 @@ await host.RunAsync();
     "DryRun": false
   }
 }
+
+
+{
+  "ConnectionStrings": {
+    "Default": "Server=TU_SERVIDOR;Database=TU_DB;User Id=TU_USER;Password=TU_PASS;TrustServerCertificate=True;"
+  },
+  "Worker": {
+    "IntervalSeconds": 10,
+    "DryRun": false
+  }
+}

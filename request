@@ -161,3 +161,9 @@ internal class Program
     "DryRun": false
   }
 }
+
+dotnet add package Dapper
+dotnet add package Microsoft.Data.SqlClient
+dotnet add package Microsoft.Extensions.Hosting
+dotnet add package Microsoft.Extensions.Configuration.Json
+dotnet add package Microsoft.Extensions.DependencyInjection

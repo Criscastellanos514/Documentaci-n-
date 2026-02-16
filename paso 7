@@ -1,0 +1,79 @@
+{
+  "ConnectionStrings": {
+    "Default": "Server=TU_SERVIDOR;Database=control_inventario_ti;User Id=TU_USER;Password=TU_PASSWORD;TrustServerCertificate=True;"
+  }
+}
+
+
+
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
+
+namespace RequestApprovalWorker.Data;
+
+public class SqlConnectionFactory
+{
+    private readonly string _connStr;
+
+    public SqlConnectionFactory(IConfiguration config)
+    {
+        _connStr = config.GetConnectionString("Default")
+                  ?? throw new Exception("No existe ConnectionStrings:Default en appsettings.json");
+    }
+
+    public SqlConnection Create() => new SqlConnection(_connStr);
+}
+
+
+
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using RequestApprovalWorker.Data;
+using RequestApprovalWorker.Services;
+using Dapper;
+
+var host = Host.CreateDefaultBuilder(args)
+    .ConfigureAppConfiguration((context, config) =>
+    {
+        config.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+    })
+    .ConfigureServices(services =>
+    {
+        services.AddSingleton<SqlConnectionFactory>();
+        services.AddSingleton<RequestApprovalService>();
+    })
+    .Build();
+
+using var scope = host.Services.CreateScope();
+var approvalService = scope.ServiceProvider.GetRequiredService<RequestApprovalService>();
+var factory = scope.ServiceProvider.GetRequiredService<SqlConnectionFactory>();
+
+// 1) Tomar un request "Pendiente" (de tu DB)
+using (var conn = factory.Create())
+{
+    await conn.OpenAsync();
+
+    // OJO: esto asume que request_state_description = 'Pendiente'
+    // Si tu campo usa otra cosa, me lo decís y lo ajusto.
+    var req = await conn.QueryFirstOrDefaultAsync<(Guid request_id, Guid user_id)>(@"
+SELECT TOP 1 request_id, user_id
+FROM requests
+WHERE request_state_description = 'Pendiente'
+ORDER BY create_at DESC
+");
+
+    if (req.request_id == Guid.Empty)
+    {
+        Console.WriteLine("No encontré requests con request_state_description = 'Pendiente'.");
+        return;
+    }
+
+    Console.WriteLine($"Probando con Request: {req.request_id} | User: {req.user_id}");
+
+    // 2) Insertar approval automático para ese request
+    await approvalService.InsertApprovalForRequestAsync(req.request_id, req.user_id);
+}
+
+Console.WriteLine("Listo. Presiona ENTER para salir.");
+Console.ReadLine();

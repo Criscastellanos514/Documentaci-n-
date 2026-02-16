@@ -36,3 +36,134 @@ public class Db
         return new SqlConnection(cs);
     }
 }
+
+using Dapper;
+using Microsoft.Extensions.Logging;
+using ManageAdmin.ApprovalWorker.Infrastructure;
+
+namespace ManageAdmin.ApprovalWorker.Services;
+
+public class ApprovalService
+{
+    private readonly Db _db;
+    private readonly ILogger<ApprovalService> _logger;
+
+    public ApprovalService(Db db, ILogger<ApprovalService> logger)
+    {
+        _db = db;
+        _logger = logger;
+    }
+
+    public async Task<int> ProcessPendingRequestsAsync(bool dryRun, CancellationToken ct)
+    {
+        using var conn = _db.CreateConnection();
+        conn.Open();
+
+        // 1) Traer requests pendientes que NO tengan aprobaciones
+        // OJO: Ajusta el filtro si tu "Pendiente" se determina por state_entity_id o state_id, según tu modelo real.
+        var pendingRequests = await conn.QueryAsync<Guid>(@"
+SELECT r.request_id
+FROM dbo.requests r
+LEFT JOIN dbo.request_approvals ra ON ra.request_id = r.request_id
+WHERE ra.request_id IS NULL
+-- Si tu pendiente se controla así, habilita esto:
+-- AND r.request_state_description = 'Pendiente'
+", new { }, commandTimeout: 60);
+
+        var list = pendingRequests.ToList();
+        if (list.Count == 0)
+        {
+            _logger.LogInformation("No hay aprobaciones para guardar.");
+            return 0;
+        }
+
+        // 2) Obtener entity_id de 'Request Approval'
+        var entityId = await conn.QueryFirstOrDefaultAsync<Guid?>(@"
+SELECT TOP 1 entity_id
+FROM dbo.entities
+WHERE entity_name = 'Request Approval'
+", commandTimeout: 60);
+
+        if (entityId is null)
+        {
+            _logger.LogError("No encontré entity_id para 'Request Approval'. Revisa tabla entities.");
+            return 0;
+        }
+
+        // 3) Obtener state_id de 'Pendiente'
+        var stateId = await conn.QueryFirstOrDefaultAsync<Guid?>(@"
+SELECT TOP 1 state_id
+FROM dbo.states
+WHERE state_name = 'Pendiente'
+", commandTimeout: 60);
+
+        if (stateId is null)
+        {
+            _logger.LogError("No encontré state_id para 'Pendiente'. Revisa tabla states.");
+            return 0;
+        }
+
+        // 4) Obtener state_entity_id (Pendiente + Request Approval)
+        var stateEntityId = await conn.QueryFirstOrDefaultAsync<Guid?>(@"
+SELECT TOP 1 state_entity_id
+FROM dbo.state_entities
+WHERE entity_id = @entityId AND state_id = @stateId
+", new { entityId, stateId }, commandTimeout: 60);
+
+        if (stateEntityId is null)
+        {
+            _logger.LogError("No encontré state_entity_id (entity_id + state_id). Revisa state_entities.");
+            return 0;
+        }
+
+        // 5) Insertar approval automático para cada request
+        var inserted = 0;
+
+        foreach (var requestId in list)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (dryRun)
+            {
+                _logger.LogInformation("[DRY RUN] Insertaría approval automático para request_id={RequestId}", requestId);
+                continue;
+            }
+
+            var requestApprovalId = Guid.NewGuid();
+            var userId = Guid.Empty; // <-- si debe ser un user real, aquí se asigna el GUID correcto
+
+            // approval_type / approval_date depende de tu tabla:
+            // En tu screenshot existe: request_approval_type, approval_date
+            // Ajusta valores si tu sistema maneja enumeraciones o GUIDs.
+            await conn.ExecuteAsync(@"
+INSERT INTO dbo.request_approvals
+(
+    request_approval_id,
+    request_id,
+    user_id,
+    state_entity_id,
+    request_approval_type,
+    approval_date,
+    create_at,
+    modify_at
+)
+VALUES
+(
+    @requestApprovalId,
+    @requestId,
+    @userId,
+    @stateEntityId,
+    'AUTOMATICO',
+    GETDATE(),
+    GETDATE(),
+    GETDATE()
+)
+", new { requestApprovalId, requestId, userId, stateEntityId }, commandTimeout: 60);
+
+            inserted++;
+            _logger.LogInformation("✅ Approval automático insertado para request_id={RequestId}", requestId);
+        }
+
+        return inserted;
+    }
+}

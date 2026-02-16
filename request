@@ -151,3 +151,13 @@ internal class Program
     "DefaultConnection": "Server=166.178.5.243;Database=TU_DB;User Id=TU_USER;Password=TU_PASS;TrustServerCertificate=True;"
   }
 }
+
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=TU_SERVIDOR;Database=control_inventario_ti;User Id=TU_USER;Password=TU_PASSWORD;TrustServerCertificate=True;"
+  },
+  "Worker": {
+    "IntervalSeconds": 10,
+    "DryRun": false
+  }
+}

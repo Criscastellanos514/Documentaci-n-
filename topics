@@ -314,3 +314,9 @@ public class SqlConnectionFactory
     public SqlConnection Create()
         => new SqlConnection(_connStr);
 }
+
+
+dotnet add package Dapper
+dotnet add package Microsoft.Data.SqlClient
+dotnet add package Microsoft.Extensions.Configuration.Json
+dotnet add package Microsoft.Extensions.Hosting

@@ -279,3 +279,18 @@ if (success)
         }
     });
 }
+
+
+namespace RequestApprovalWorker.Models;
+
+public class RequestApproval
+{
+    public Guid request_approval_id { get; set; }
+    public Guid request_id { get; set; }
+    public Guid user_id { get; set; }
+    public Guid state_entity_id { get; set; }
+    public DateTime create_at { get; set; }
+    public DateTime modify_at { get; set; }
+    public string request_approval_type { get; set; } = "AUTOMATICO";
+    public DateTime approval_date { get; set; } = DateTime.UtcNow;
+}

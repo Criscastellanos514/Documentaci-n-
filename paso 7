@@ -283,3 +283,14 @@ namespace RequestApprovalWorker
 }
 
 "DefaultConnection": "Server=localhost;Database=TU_DB;Trusted_Connection=True;TrustServerCertificate=True;"
+
+
+{
+  "ConnectionStrings": {
+    "Default": "Server=localhost;Database=TU_BASE_DE_DATOS;Trusted_Connection=True;TrustServerCertificate=True;"
+  },
+  "Worker": {
+    "IntervalSeconds": 10,
+    "DryRun": false
+  }
+}

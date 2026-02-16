@@ -1,0 +1,145 @@
+using System.Data;
+using System.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
+
+namespace RequestApprovalWorker.Data;
+
+public class SqlConnectionFactory
+{
+    private readonly IConfiguration _config;
+
+    public SqlConnectionFactory(IConfiguration config)
+    {
+        _config = config;
+    }
+
+    public IDbConnection Create()
+    {
+        var cs = _config.GetConnectionString("DefaultConnection");
+        return new SqlConnection(cs);
+    }
+}
+
+
+using Dapper;
+using RequestApprovalWorker.Data;
+using System;
+using System.Threading.Tasks;
+
+namespace RequestApprovalWorker.Services;
+
+public class RequestApprovalService
+{
+    private readonly SqlConnectionFactory _factory;
+
+    public RequestApprovalService(SqlConnectionFactory factory)
+    {
+        _factory = factory;
+    }
+
+    public async Task InsertApprovalForRequestAsync(Guid requestId, Guid userId)
+    {
+        using var conn = _factory.Create();
+        conn.Open();
+
+        // 1) entity_id de 'Request Approval'
+        var entityId = await conn.QueryFirstAsync<Guid>(@"
+            SELECT TOP 1 entity_id
+            FROM entities
+            WHERE entity_name = 'Request Approval'
+        ");
+
+        // 2) state_id de 'Pendiente'
+        var stateId = await conn.QueryFirstAsync<Guid>(@"
+            SELECT TOP 1 state_id
+            FROM states
+            WHERE state_name = 'Pendiente'
+        ");
+
+        // 3) state_entity_id
+        var stateEntityId = await conn.QueryFirstAsync<Guid>(@"
+            SELECT TOP 1 state_entity_id
+            FROM state_entities
+            WHERE entity_id = @entityId AND state_id = @stateId
+        ", new { entityId, stateId });
+
+        await conn.ExecuteAsync(@"
+            INSERT INTO request_approvals
+            (
+                request_approval_id,
+                request_id,
+                user_id,
+                state_entity_id,
+                request_approval_type,
+                approval_date,
+                create_at,
+                modify_at
+            )
+            VALUES
+            (
+                NEWID(),
+                @requestId,
+                @userId,
+                @stateEntityId,
+                'Automatic',
+                GETDATE(),
+                GETDATE(),
+                GETDATE()
+            )
+        ", new { requestId, userId, stateEntityId });
+    }
+}
+
+
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using RequestApprovalWorker.Data;
+using RequestApprovalWorker.Services;
+using Dapper;
+
+namespace RequestApprovalWorker;
+
+internal class Program
+{
+    public static async Task Main(string[] args)
+    {
+        var host = Host.CreateDefaultBuilder(args)
+            .ConfigureAppConfiguration((context, config) =>
+            {
+                config.AddJsonFile("Config/appsettings.json", optional: false, reloadOnChange: true);
+            })
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<SqlConnectionFactory>();
+                services.AddSingleton<RequestApprovalService>();
+            })
+            .Build();
+
+        using var scope = host.Services.CreateScope();
+        var approvalService = scope.ServiceProvider.GetRequiredService<RequestApprovalService>();
+        var factory = scope.ServiceProvider.GetRequiredService<SqlConnectionFactory>();
+
+        using var conn = factory.Create();
+        conn.Open();
+
+        var req = await conn.QueryFirstOrDefaultAsync<(Guid request_id, Guid user_id)>(@"
+            SELECT TOP 1 request_id, user_id
+            FROM requests
+            WHERE request_state_description = 'Pendiente'
+            ORDER BY create_at DESC
+        ");
+
+        if (req.request_id == Guid.Empty)
+        {
+            Console.WriteLine("No encontré requests en estado 'Pendiente'.");
+            return;
+        }
+
+        Console.WriteLine($"Probando con Request: {req.request_id} | User: {req.user_id}");
+
+        await approvalService.InsertApprovalForRequestAsync(req.request_id, req.user_id);
+
+        Console.WriteLine("Approval automático insertado correctamente.");
+    }
+}

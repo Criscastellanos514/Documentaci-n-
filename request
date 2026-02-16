@@ -142,4 +142,12 @@ internal class Program
 
         Console.WriteLine("Approval automático insertado correctamente.");
     }
+
+
+
+
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=166.178.5.243;Database=TU_DB;User Id=TU_USER;Password=TU_PASS;TrustServerCertificate=True;"
+  }
 }

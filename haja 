@@ -1,0 +1,176 @@
+{
+  "ConnectionStrings": {
+    "Default": "Server=TU_SERVIDOR;Database=TU_DB;User Id=TU_USER;Password=TU_PASS;TrustServerCertificate=True;"
+  },
+  "Worker": {
+    "IntervalSeconds": 10,
+    "DryRun": false
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.Hosting.Lifetime": "Information"
+    }
+  }
+}
+
+
+using System.Data;
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
+
+namespace PruebaWorker.Data
+{
+    public class SqlConnectionFactory
+    {
+        private readonly IConfiguration _config;
+
+        public SqlConnectionFactory(IConfiguration config)
+        {
+            _config = config;
+        }
+
+        public IDbConnection Create()
+        {
+            var cs = _config.GetConnectionString("Default");
+
+            if (string.IsNullOrWhiteSpace(cs))
+                throw new InvalidOperationException("No se encontró ConnectionStrings:Default en appsettings.json");
+
+            return new SqlConnection(cs);
+        }
+    }
+}
+
+using System;
+using System.Threading.Tasks;
+using Dapper;
+using PruebaWorker.Data;
+
+namespace PruebaWorker.Services
+{
+    public class RequestApprovalService
+    {
+        private readonly SqlConnectionFactory _factory;
+
+        public RequestApprovalService(SqlConnectionFactory factory)
+        {
+            _factory = factory;
+        }
+
+        public async Task InsertApprovalForRequestAsync(Guid requestId, Guid userId)
+        {
+            using var conn = _factory.Create();
+            conn.Open();
+
+            // EJEMPLO: aquí va tu lógica real.
+            // Te dejo un insert dummy para probar que Dapper + conexión funciona:
+            await conn.ExecuteAsync(
+                "INSERT INTO request_approvals (request_id, user_id, created_at) VALUES (@requestId, @userId, GETDATE())",
+                new { requestId, userId }
+            );
+        }
+    }
+}
+
+
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Dapper;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using PruebaWorker.Data;
+using PruebaWorker.Services;
+
+namespace PruebaWorker
+{
+    public class Worker : BackgroundService
+    {
+        private readonly ILogger<Worker> _logger;
+        private readonly IConfiguration _config;
+        private readonly SqlConnectionFactory _factory;
+        private readonly RequestApprovalService _approvalService;
+
+        public Worker(
+            ILogger<Worker> logger,
+            IConfiguration config,
+            SqlConnectionFactory factory,
+            RequestApprovalService approvalService)
+        {
+            _logger = logger;
+            _config = config;
+            _factory = factory;
+            _approvalService = approvalService;
+        }
+
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        {
+            var seconds = _config.GetValue<int>("Worker:IntervalSeconds");
+            var dryRun = _config.GetValue<bool>("Worker:DryRun");
+
+            _logger.LogInformation("Worker iniciado. IntervalSeconds={seconds}, DryRun={dryRun}", seconds, dryRun);
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    using var conn = _factory.Create();
+                    conn.Open();
+
+                    // EJEMPLO: buscar 1 request pendiente (ajustá a tu tabla real)
+                    var req = await conn.QueryFirstOrDefaultAsync<(Guid request_id, Guid user_id)>(@"
+                        SELECT TOP 1 request_id, user_id
+                        FROM requests
+                        WHERE request_state_description = 'Pendiente'
+                        ORDER BY create_at DESC
+                    ");
+
+                    if (req.request_id == Guid.Empty)
+                    {
+                        _logger.LogInformation("No encontré requests en estado Pendiente.");
+                    }
+                    else
+                    {
+                        _logger.LogInformation("Encontré request={request} user={user}", req.request_id, req.user_id);
+
+                        if (!dryRun)
+                        {
+                            await _approvalService.InsertApprovalForRequestAsync(req.request_id, req.user_id);
+                            _logger.LogInformation("Approval insertado.");
+                        }
+                        else
+                        {
+                            _logger.LogInformation("DryRun=true: no inserté nada.");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error en ejecución del worker");
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(seconds), stoppingToken);
+            }
+        }
+    }
+}
+
+
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using PruebaWorker;
+using PruebaWorker.Data;
+using PruebaWorker.Services;
+
+var host = Host.CreateDefaultBuilder(args)
+    .ConfigureServices(services =>
+    {
+        services.AddSingleton<SqlConnectionFactory>();
+        services.AddSingleton<RequestApprovalService>();
+        services.AddHostedService<Worker>();
+    })
+    .Build();
+
+await host.RunAsync();

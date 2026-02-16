@@ -281,3 +281,5 @@ namespace RequestApprovalWorker
         }
     }
 }
+
+"DefaultConnection": "Server=localhost;Database=TU_DB;Trusted_Connection=True;TrustServerCertificate=True;"

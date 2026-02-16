@@ -221,3 +221,63 @@ Console.WriteLine("Listo.");
 
 dotnet add package Dapper
 dotnet add package Microsoft.Data.SqlClient
+
+
+using System;
+using System.Threading.Tasks;
+using Dapper;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using RequestApprovalWorker.Data;
+using RequestApprovalWorker.Services;
+
+namespace RequestApprovalWorker
+{
+    internal class Program
+    {
+        public static async Task Main(string[] args)
+        {
+            var host = Host.CreateDefaultBuilder(args)
+                .ConfigureAppConfiguration((context, config) =>
+                {
+                    config.AddJsonFile("Config/appsettings.json", optional: false, reloadOnChange: true);
+                })
+                .ConfigureServices(services =>
+                {
+                    services.AddSingleton<SqlConnectionFactory>();
+                    services.AddSingleton<RequestApprovalService>();
+                })
+                .Build();
+
+            using var scope = host.Services.CreateScope();
+            var approvalService = scope.ServiceProvider.GetRequiredService<RequestApprovalService>();
+            var factory = scope.ServiceProvider.GetRequiredService<SqlConnectionFactory>();
+
+            using var conn = factory.Create();
+            conn.Open();
+
+            // Busca el último request que esté en "Pendiente"
+            // Si tu columna se llama distinto, cámbiala aquí:
+            var req = await conn.QueryFirstOrDefaultAsync<(Guid request_id, Guid user_id)>(@"
+                SELECT TOP 1 request_id, user_id
+                FROM requests
+                WHERE request_state_description = 'Pendiente'
+                ORDER BY create_at DESC
+            ");
+
+            if (req.request_id == Guid.Empty)
+            {
+                Console.WriteLine("No encontré requests en estado 'Pendiente'.");
+                return;
+            }
+
+            Console.WriteLine($"Probando con Request: {req.request_id} | User: {req.user_id}");
+
+            await approvalService.InsertApprovalForRequestAsync(req.request_id, req.user_id);
+
+            Console.WriteLine("✅ Approval automático insertado en request_approvals.");
+            Console.WriteLine("Listo.");
+        }
+    }
+}

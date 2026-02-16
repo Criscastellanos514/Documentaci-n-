@@ -294,3 +294,23 @@ public class RequestApproval
     public string request_approval_type { get; set; } = "AUTOMATICO";
     public DateTime approval_date { get; set; } = DateTime.UtcNow;
 }
+
+
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
+
+namespace RequestApprovalWorker.Data;
+
+public class SqlConnectionFactory
+{
+    private readonly string _connStr;
+
+    public SqlConnectionFactory(IConfiguration config)
+    {
+        _connStr = config.GetConnectionString("Default") 
+                   ?? throw new Exception("No existe ConnectionStrings:Default en appsettings.json");
+    }
+
+    public SqlConnection Create()
+        => new SqlConnection(_connStr);
+}

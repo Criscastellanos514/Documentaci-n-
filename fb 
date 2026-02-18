@@ -4,3 +4,14 @@ GO
 SELECT state_id, state_name
 FROM dbo.states
 ORDER BY state_name;
+
+SELECT TOP 1 entity_id
+FROM dbo.entities
+WHERE entity_name = 'Request Approval';
+
+SELECT TOP 1 state_id
+FROM dbo.states
+WHERE state_name = 'Pendiente';
+
+SELECT TOP 1 state_entity_id
+FROM dbo.state_entities;

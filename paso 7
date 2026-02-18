@@ -353,3 +353,261 @@ await host.RunAsync();
 "Broker": {
   "Url": "ws://localhost:9991/ws"
 }
+
+
+{
+  "ConnectionStrings": {
+    "Default": "Server=localhost;Database=contro_inventario_ti;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False;"
+  },
+  "Worker": {
+    "IntervalSeconds": 10,
+    "DryRun": false,
+    "BatchSize": 10
+  },
+  "Broker": {
+    "Url": "ws://166.178.5.148:5000/ws",
+    "Enabled": true
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.Hosting.Lifetime": "Information"
+    }
+  }
+}
+
+
+
+using System.Net.WebSockets;
+using System.Text;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+
+namespace PruebaWorker.Services;
+
+public interface IMessageBroker
+{
+    Task PublishAsync(string message, CancellationToken ct);
+}
+
+public class WebSocketMessageBroker : IMessageBroker
+{
+    private readonly ILogger<WebSocketMessageBroker> _logger;
+    private readonly string _url;
+    private readonly bool _enabled;
+
+    public WebSocketMessageBroker(IConfiguration config, ILogger<WebSocketMessageBroker> logger)
+    {
+        _logger = logger;
+        _url = config["Broker:Url"] ?? "";
+        _enabled = bool.TryParse(config["Broker:Enabled"], out var en) && en;
+    }
+
+    public async Task PublishAsync(string message, CancellationToken ct)
+    {
+        if (!_enabled)
+        {
+            _logger.LogInformation("Broker deshabilitado. Mensaje no enviado: {Message}", message);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_url))
+            throw new InvalidOperationException("Broker:Url no está configurado.");
+
+        using var ws = new ClientWebSocket();
+        _logger.LogInformation("Conectando al broker WS: {Url}", _url);
+
+        await ws.ConnectAsync(new Uri(_url), ct);
+
+        var bytes = Encoding.UTF8.GetBytes(message);
+        await ws.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, cancellationToken: ct);
+
+        _logger.LogInformation("Mensaje enviado al broker (len={Len}).", bytes.Length);
+
+        await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "ok", ct);
+    }
+}
+
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Configuration;
+using PruebaWorker.Data;
+using PruebaWorker.Services;
+
+var host = Host.CreateDefaultBuilder(args)
+    .ConfigureAppConfiguration((context, config) =>
+    {
+        config.AddJsonFile("Config/appsettings.json", optional: false, reloadOnChange: true);
+    })
+    .ConfigureServices((context, services) =>
+    {
+        services.AddSingleton<SqlConnectionFactory>();
+        services.AddSingleton<RequestApprovalService>();
+
+        // Broker
+        services.AddSingleton<IMessageBroker, WebSocketMessageBroker>();
+
+        // Worker
+        services.AddHostedService<Worker>();
+    })
+    .Build();
+
+await host.RunAsync();
+
+
+
+
+
+
+using System.Data;
+using Dapper;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using PruebaWorker.Data;
+using PruebaWorker.Services;
+
+namespace PruebaWorker;
+
+public class Worker : BackgroundService
+{
+    private readonly ILogger<Worker> _logger;
+    private readonly IConfiguration _config;
+    private readonly SqlConnectionFactory _factory;
+    private readonly RequestApprovalService _approvalService;
+    private readonly IMessageBroker _broker;
+
+    public Worker(
+        ILogger<Worker> logger,
+        IConfiguration config,
+        SqlConnectionFactory factory,
+        RequestApprovalService approvalService,
+        IMessageBroker broker)
+    {
+        _logger = logger;
+        _config = config;
+        _factory = factory;
+        _approvalService = approvalService;
+        _broker = broker;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        var intervalSeconds = _config.GetValue<int>("Worker:IntervalSeconds", 10);
+        var dryRun = _config.GetValue<bool>("Worker:DryRun", false);
+        var batchSize = _config.GetValue<int>("Worker:BatchSize", 10);
+
+        _logger.LogInformation("Worker iniciado. IntervalSeconds={IntervalSeconds}, DryRun={DryRun}, BatchSize={BatchSize}",
+            intervalSeconds, dryRun, batchSize);
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await ProcessBatchAsync(batchSize, dryRun, stoppingToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error en ejecución del worker.");
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(intervalSeconds), stoppingToken);
+        }
+    }
+
+    private async Task ProcessBatchAsync(int batchSize, bool dryRun, CancellationToken ct)
+    {
+        using var conn = _factory.Create();
+        conn.Open();
+
+        // 1) Traer pendientes (ajusta el WHERE a tu esquema real)
+        var pending = (await conn.QueryAsync<RequestRow>(@"
+SELECT TOP (@batchSize)
+    request_id,
+    user_id
+FROM requests
+WHERE request_state_description = 'Pendiente'
+ORDER BY create_at DESC;",
+            new { batchSize }))
+            .ToList();
+
+        if (pending.Count == 0)
+        {
+            _logger.LogInformation("No encontré requests en estado Pendiente.");
+            return;
+        }
+
+        _logger.LogInformation("Pendientes encontrados: {Count}", pending.Count);
+
+        foreach (var req in pending)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
+            using var tx = conn.BeginTransaction();
+
+            try
+            {
+                // 2) Marcar “EnProceso” para evitar doble-proceso (opcional pero recomendado)
+                var updated = await conn.ExecuteAsync(@"
+UPDATE requests
+SET request_state_description = 'EnProceso'
+WHERE request_id = @request_id AND request_state_description = 'Pendiente';",
+                    new { req.request_id }, tx);
+
+                if (updated == 0)
+                {
+                    _logger.LogWarning("Request {RequestId} ya no está Pendiente (probablemente otro proceso lo tomó).", req.request_id);
+                    tx.Rollback();
+                    continue;
+                }
+
+                _logger.LogInformation("Procesando RequestId={RequestId} UserId={UserId} DryRun={DryRun}",
+                    req.request_id, req.user_id, dryRun);
+
+                if (!dryRun)
+                {
+                    // 3) Tu lógica real (inserta approval, etc.)
+                    await _approvalService.InsertApprovalForRequestAsync(req.request_id, req.user_id);
+
+                    // 4) Marcar Aprobada (ajusta)
+                    await conn.ExecuteAsync(@"
+UPDATE requests
+SET request_state_description = 'Aprobada'
+WHERE request_id = @request_id;",
+                        new { req.request_id }, tx);
+
+                    // 5) Publicar al broker (mensaje simple JSON)
+                    var msg = $"{{\"type\":\"request.approved\",\"requestId\":\"{req.request_id}\",\"userId\":\"{req.user_id}\"}}";
+                    await _broker.PublishAsync(msg, ct);
+                }
+
+                tx.Commit();
+                sw.Stop();
+
+                _logger.LogInformation("OK RequestId={RequestId} en {Ms}ms", req.request_id, sw.ElapsedMilliseconds);
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    // Marcar Error y guardar detalle mínimo (si tienes columna)
+                    await conn.ExecuteAsync(@"
+UPDATE requests
+SET request_state_description = 'Error'
+WHERE request_id = @request_id;",
+                        new { req.request_id }, tx);
+
+                    tx.Commit();
+                }
+                catch
+                {
+                    tx.Rollback();
+                }
+
+                _logger.LogError(ex, "FALLÓ RequestId={RequestId}", req.request_id);
+            }
+        }
+    }
+
+    private sealed record RequestRow(Guid request_id, Guid user_id);
+}

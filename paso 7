@@ -659,3 +659,27 @@ SELECT TOP 1
   modify_at
 FROM control_inventario_ti.dbo.requests
 WHERE request_name = 'Prueba_worker_001';
+
+
+INSERT INTO dbo.request_approvals
+(
+    request_approval_id,
+    request_id,
+    user_id,
+    state_entity_id,
+    request_approval_type,
+    approval_date,
+    create_at,
+    modify_at
+)
+VALUES
+(
+    NEWID(),
+    'TU_REQUEST_ID_GUID',
+    'TU_USER_ID_GUID',
+    'TU_STATE_ENTITY_ID_GUID',
+    'AUTO',
+    GETDATE(),
+    GETDATE(),
+    GETDATE()
+);

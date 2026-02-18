@@ -724,3 +724,27 @@ FROM sys.dm_exec_requests r
 CROSS APPLY sys.dm_exec_sql_text(r.sql_handle) t
 WHERE r.session_id > 50
 ORDER BY r.wait_time DESC;
+
+
+INSERT INTO request_approvals
+(
+    request_approval_id,
+    request_id,
+    user_id,
+    state_entity_id,
+    request_approval_type,
+    approval_date,
+    create_at,
+    modify_at
+)
+VALUES
+(
+    NEWID(),
+    'ID_REAL_DEL_REQUEST',
+    'ID_REAL_DEL_USER',
+    'ID_REAL_DEL_STATE_ENTITY',
+    'AUTO',
+    GETDATE(),
+    GETDATE(),
+    GETDATE()
+)

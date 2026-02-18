@@ -642,3 +642,9 @@ Server=IP_DEL_SQL,1433;Database=control_inventario_ti;User Id=USUARIO;Password=C
 "ConnectionStrings": {
   "Default": "Server=166.178.5.240,1433;Database=control_inventario_ti;Integrated Security=True;TrustServerCertificate=True;"
 }
+
+
+
+SELECT request_name, request_state_description
+FROM control_inventario_ti.dbo.requests
+ORDER BY create_at DESC;

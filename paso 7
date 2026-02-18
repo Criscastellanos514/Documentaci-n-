@@ -618,3 +618,16 @@ config.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
 
 
 Server=IP_DEL_SQL,1433;Database=control_inventario_ti;User Id=USUARIO;Password=CLAVE;TrustServerCertificate=True;Encrypt=False;
+
+{
+  "ConnectionStrings": {
+    "Default": "Server=IP_DEL_SQL,1433;Database=control_inventario_ti;User Id=USUARIO;Password=CLAVE;TrustServerCertificate=True;Encrypt=False;"
+  },
+  "Worker": {
+    "IntervalSeconds": 10,
+    "DryRun": false
+  },
+  "MessageBroker": {
+    "Url": "166.178.5.148:9100"
+  }
+}

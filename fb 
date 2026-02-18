@@ -15,3 +15,12 @@ WHERE state_name = 'Pendiente';
 
 SELECT TOP 1 state_entity_id
 FROM dbo.state_entities;
+
+
+SELECT *
+FROM request_approvals
+WHERE request_id = (
+    SELECT request_id
+    FROM requests
+    WHERE request_name = 'Prueba_worker_001'
+);

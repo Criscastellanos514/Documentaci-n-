@@ -631,3 +631,9 @@ Server=IP_DEL_SQL,1433;Database=control_inventario_ti;User Id=USUARIO;Password=C
     "Url": "166.178.5.148:9100"
   }
 }
+
+
+
+"ConnectionStrings": {
+  "Default": "Server=HNCSTG010240WAP\\HNCSTG010240WAP;Database=control_inventario_ti;User Id=MzQwMDIwTI_;Password=a25uBHJUSTgzJXdoTHc=;TrustServerCertificate=True;"
+}

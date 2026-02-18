@@ -1,0 +1,6 @@
+USE control_inventario_ti;
+GO
+
+SELECT state_id, state_name
+FROM dbo.states
+ORDER BY state_name;

@@ -172,3 +172,67 @@ JOIN dbo.request_approvals ra ON ra.request_id = r.request_id
 JOIN dbo.state_entities se ON se.state_entity_id = ra.state_entity_id
 JOIN dbo.states s ON s.state_id = se.state_id
 WHERE r.request_name = 'NombreQueCreaste';
+
+
+public async Task<int> UpdatePendingToReviewIfCompleteAsync(Guid requestId, CancellationToken ct = default)
+{
+    // 1) Cargar estado actual y revisor desde request_approvals
+    var data = await _db.QueryFirstOrDefaultAsync<(Guid StateEntityId, Guid? ReviewerUserId)>(
+        @"SELECT TOP 1 state_entity_id, reviewer_user_id  -- <-- AJUSTA SI ES OTRO NOMBRE
+          FROM dbo.request_approvals
+          WHERE request_id = @requestId
+          ORDER BY modify_at DESC;",
+        new { requestId });
+
+    if (data == default)
+        return 0;
+
+    // 2) Resolver entity + states
+    var entityId = await _db.ExecuteScalarAsync<Guid>(
+        @"SELECT TOP 1 entity_id
+          FROM dbo.entities
+          WHERE entity_name = 'Request Approval';");
+
+    var pending = await _db.ExecuteScalarAsync<Guid>(
+        @"SELECT TOP 1 se.state_entity_id
+          FROM dbo.state_entities se
+          JOIN dbo.states s ON s.state_id = se.state_id
+          WHERE se.entity_id = @entityId
+            AND s.state_name = 'Pendiente';",
+        new { entityId });
+
+    var review = await _db.ExecuteScalarAsync<Guid>(
+        @"SELECT TOP 1 se.state_entity_id
+          FROM dbo.state_entities se
+          JOIN dbo.states s ON s.state_id = se.state_id
+          WHERE se.entity_id = @entityId
+            AND s.state_name = N'En revisión';",
+        new { entityId });
+
+    // 3) Si no está pendiente, no hacer nada
+    if (data.StateEntityId != pending)
+        return 0;
+
+    // 4) Si no tiene revisor, se queda pendiente
+    if (data.ReviewerUserId is null || data.ReviewerUserId == Guid.Empty)
+        return 0;
+
+    // 5) UPDATE idempotente (Pendiente → En revisión)
+    var rows = await _db.ExecuteAsync(
+        @"UPDATE dbo.request_approvals
+          SET state_entity_id = @review,
+              modify_at = SYSUTCDATETIME()
+          WHERE request_id = @requestId
+            AND state_entity_id = @pending;",
+        new { requestId, pending, review });
+
+    // (Opcional) sincronizar requests si tu UI usa ese campo
+    await _db.ExecuteAsync(
+        @"UPDATE dbo.requests
+          SET request_state_description = N'En revisión'
+          WHERE request_id = @requestId
+            AND (request_state_description IS NULL OR request_state_description = N'Pendiente');",
+        new { requestId });
+
+    return rows;
+}

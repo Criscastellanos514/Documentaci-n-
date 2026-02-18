@@ -611,3 +611,6 @@ WHERE request_id = @request_id;",
 
     private sealed record RequestRow(Guid request_id, Guid user_id);
 }
+
+
+config.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);

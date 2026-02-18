@@ -334,9 +334,22 @@ await host.RunAsync();
 {
   "ConnectionStrings": {
     "Default": "Server=HNCSTG010240WAP\\HNCSTG010240WAP;Database=TU_BASE_DE_DATOS;Trusted_Connection=True;TrustServerCertificate=True;"
-  },
+ o },
   "Worker": {
     "IntervalSeconds": 10,
     "DryRun": false
   }
+}
+
+
+
+
+"Broker": {
+  "Url": "ws://localhost:5000/ws"
+}
+
+
+
+"Broker": {
+  "Url": "ws://localhost:9991/ws"
 }

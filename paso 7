@@ -304,3 +304,9 @@ dotnet add package Microsoft.Extensions.Configuration.Json
 "ConnectionStrings": {
   "Default": "Server=.;Database=TU_BASE_DE_DATOS;Trusted_Connection=True;TrustServerCertificate=True;"
 }
+
+"ConnectionStrings": {
+  "Default": "Server=HNCSTG010240WAP\\HNCSTG010240WAP;Database=TU_BASE_DE_DATOS;Trusted_Connection=True;TrustServerCertificate=True;"
+}
+
+config.AddJsonFile("Config/appsettings.json", optional: false, reloadOnChange: true);

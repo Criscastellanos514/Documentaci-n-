@@ -422,3 +422,8 @@ VALUES
         return rows;
     }
 }
+
+SELECT request_name, request_state_description
+FROM control_inventario_ti.dbo.requests
+WHERE request_state_description IS NULL
+   OR request_state_description = '';

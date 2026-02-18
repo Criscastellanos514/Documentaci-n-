@@ -45,3 +45,13 @@ WHERE ra.request_id = (
   FROM dbo.requests
   WHERE request_name = 'Prueba_worker_001'
 );
+
+SELECT TOP 1
+  se.state_entity_id,
+  s.state_name,
+  e.entity_name
+FROM dbo.state_entities se
+JOIN dbo.states s ON s.state_id = se.state_id
+JOIN dbo.entities e ON e.entity_id = se.entity_id
+WHERE e.entity_name = 'Request Approval'
+  AND s.state_name = 'Pendiente';

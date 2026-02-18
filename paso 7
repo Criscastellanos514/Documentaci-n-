@@ -299,3 +299,8 @@ namespace RequestApprovalWorker
 dotnet add package Dapper
 dotnet add package Microsoft.Data.SqlClient
 dotnet add package Microsoft.Extensions.Configuration.Json
+
+
+"ConnectionStrings": {
+  "Default": "Server=.;Database=TU_BASE_DE_DATOS;Trusted_Connection=True;TrustServerCertificate=True;"
+}

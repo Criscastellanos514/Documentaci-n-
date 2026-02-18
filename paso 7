@@ -614,3 +614,7 @@ WHERE request_id = @request_id;",
 
 
 config.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+
+
+
+Server=IP_DEL_SQL,1433;Database=control_inventario_ti;User Id=USUARIO;Password=CLAVE;TrustServerCertificate=True;Encrypt=False;

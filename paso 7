@@ -648,3 +648,14 @@ Server=IP_DEL_SQL,1433;Database=control_inventario_ti;User Id=USUARIO;Password=C
 SELECT request_name, request_state_description
 FROM control_inventario_ti.dbo.requests
 ORDER BY create_at DESC;
+
+
+
+
+SELECT TOP 1
+  request_name,
+  request_state_description,
+  create_at,
+  modify_at
+FROM control_inventario_ti.dbo.requests
+WHERE request_name = 'Prueba_worker_001';

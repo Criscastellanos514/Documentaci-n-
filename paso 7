@@ -310,3 +310,33 @@ dotnet add package Microsoft.Extensions.Configuration.Json
 }
 
 config.AddJsonFile("Config/appsettings.json", optional: false, reloadOnChange: true);
+
+
+
+
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using PruebaWorker;
+using PruebaWorker.Data;
+using PruebaWorker.Services;
+
+var host = Host.CreateDefaultBuilder(args)
+    .ConfigureServices((context, services) =>
+    {
+        services.AddSingleton<SqlConnectionFactory>();
+        services.AddSingleton<RequestApprovalService>();
+        services.AddHostedService<Worker>();
+    })
+    .Build();
+
+await host.RunAsync();
+
+{
+  "ConnectionStrings": {
+    "Default": "Server=HNCSTG010240WAP\\HNCSTG010240WAP;Database=TU_BASE_DE_DATOS;Trusted_Connection=True;TrustServerCertificate=True;"
+  },
+  "Worker": {
+    "IntervalSeconds": 10,
+    "DryRun": false
+  }
+}

@@ -683,3 +683,31 @@ VALUES
     GETDATE(),
     GETDATE()
 );
+
+
+
+await conn.ExecuteAsync(@"
+INSERT INTO dbo.request_approvals
+(
+    request_approval_id,
+    request_id,
+    user_id,
+    state_entity_id,
+    request_approval_type,
+    approval_date,
+    create_at,
+    modify_at
+)
+VALUES
+(
+    NEWID(),
+    @requestId,
+    @userId,
+    @stateEntityId,
+    'AUTO',
+    GETDATE(),
+    GETDATE(),
+    GETDATE()
+);",
+new { requestId, userId, stateEntityId },
+commandTimeout: 120);

@@ -759,3 +759,11 @@ WHERE entity_name = 'Request Approval'
 SELECT TOP 1 state_id 
 FROM states
 WHERE state_name = 'Pendiente'
+
+SELECT TOP 1 entity_id
+FROM dbo.entities
+WHERE entity_name = 'Request Approval';
+
+SELECT TOP 1 state_id
+FROM dbo.states
+WHERE state_name = 'Pendiente';

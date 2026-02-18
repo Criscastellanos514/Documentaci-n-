@@ -164,3 +164,11 @@ JOIN dbo.request_approvals ra ON ra.request_id = r.request_id
 JOIN dbo.state_entities se ON se.state_entity_id = ra.state_entity_id
 JOIN dbo.states s ON s.state_id = se.state_id
 WHERE r.request_name = 'Prueba_worker_001';
+
+
+SELECT r.request_name, s.state_name
+FROM dbo.requests r
+JOIN dbo.request_approvals ra ON ra.request_id = r.request_id
+JOIN dbo.state_entities se ON se.state_entity_id = ra.state_entity_id
+JOIN dbo.states s ON s.state_id = se.state_id
+WHERE r.request_name = 'NombreQueCreaste';

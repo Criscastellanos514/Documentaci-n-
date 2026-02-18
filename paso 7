@@ -748,3 +748,14 @@ VALUES
     GETDATE(),
     GETDATE()
 )
+
+
+
+
+SELECT TOP 1 entity_id 
+FROM entities
+WHERE entity_name = 'Request Approval'
+
+SELECT TOP 1 state_id 
+FROM states
+WHERE state_name = 'Pendiente'

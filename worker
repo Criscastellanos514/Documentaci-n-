@@ -1,0 +1,124 @@
+using System.Data;
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
+
+namespace Worker.Data;
+
+public sealed class SqlConnectionFactory
+{
+    private readonly IConfiguration _config;
+
+    public SqlConnectionFactory(IConfiguration config)
+    {
+        _config = config;
+    }
+
+    public IDbConnection Create()
+    {
+        var cs = _config.GetConnectionString("Default");
+
+        if (string.IsNullOrWhiteSpace(cs))
+            throw new InvalidOperationException("No se encontró ConnectionStrings:Default en appsettings.json");
+
+        return new SqlConnection(cs);
+    }
+}
+
+
+using Dapper;
+using Worker.Data;
+
+namespace Worker.Services;
+
+public sealed class RequestApprovalService
+{
+    private readonly SqlConnectionFactory _factory;
+
+    public RequestApprovalService(SqlConnectionFactory factory)
+    {
+        _factory = factory;
+    }
+
+    public async Task<int> PingAsync()
+    {
+        using var conn = _factory.Create();
+        return await conn.ExecuteScalarAsync<int>("SELECT 1");
+    }
+}
+
+
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Worker.Services;
+
+namespace Worker.Worker;
+
+public sealed class Worker : BackgroundService
+{
+    private readonly ILogger<Worker> _logger;
+    private readonly IConfiguration _config;
+    private readonly IServiceScopeFactory _scopeFactory;
+
+    public Worker(ILogger<Worker> logger, IConfiguration config, IServiceScopeFactory scopeFactory)
+    {
+        _logger = logger;
+        _config = config;
+        _scopeFactory = scopeFactory;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        var intervalSeconds = _config.GetValue<int>("Worker:IntervalSeconds", 10);
+
+        _logger.LogInformation("Worker iniciado. IntervalSeconds={IntervalSeconds}", intervalSeconds);
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var svc = scope.ServiceProvider.GetRequiredService<RequestApprovalService>();
+
+                var ok = await svc.PingAsync();
+                _logger.LogInformation("Ping DB OK => {Ok}", ok);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error en Worker");
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(intervalSeconds), stoppingToken);
+        }
+    }
+}
+
+
+
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Worker.Data;
+using Worker.Services;
+
+var host = Host.CreateDefaultBuilder(args)
+    .ConfigureLogging(logging =>
+    {
+        logging.ClearProviders();
+        logging.AddSimpleConsole(o =>
+        {
+            o.SingleLine = true;
+            o.TimestampFormat = "HH:mm:ss ";
+        });
+        logging.SetMinimumLevel(LogLevel.Information);
+    })
+    .ConfigureServices((context, services) =>
+    {
+        services.AddSingleton<SqlConnectionFactory>();
+        services.AddScoped<RequestApprovalService>();
+        services.AddHostedService<Worker.Worker.Worker>();
+    })
+    .Build();
+
+await host.RunAsync();

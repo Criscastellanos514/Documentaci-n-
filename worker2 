@@ -470,3 +470,28 @@ var host = Host.CreateDefaultBuilder(args)
 
 await host.RunAsync();
 
+
+
+private async Task HandleMessageAsync(ApprovalMessage message)
+{
+    _logger.LogInformation(
+        "Mensaje recibido — RequestId={RequestId} UserId={UserId} CreateAt={CreateAt}",
+        message.RequestId, message.UserId, message.CreateAt);
+
+    try
+    {
+        var nombre = string.IsNullOrWhiteSpace(message.RequestName)
+            ? message.RequestDescription
+            : message.RequestName;
+
+        await _approvalService.ProcesarRequestAsync(
+            message.RequestId,
+            message.UserId,
+            nombre);
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Error procesando RequestId={RequestId}.", message.RequestId);
+    }
+}
+

@@ -368,3 +368,51 @@ FROM requests r
 JOIN state_entities se ON r.state_entity_id = se.state_entity_id
 JOIN states s ON se.state_id = s.state_id
 WHERE s.state_name = 'Pendiente'
+
+
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using PruebaWorker.Data;
+using PruebaWorker.Services;
+
+namespace PruebaWorker;
+
+public static class Program
+{
+    public static async Task Main(string[] args)
+    {
+        var host = Host.CreateDefaultBuilder(args)
+            .ConfigureLogging(logging =>
+            {
+                logging.ClearProviders();
+                logging.AddSimpleConsole(o =>
+                {
+                    o.SingleLine = true;
+                    o.TimestampFormat = "HH:mm:ss ";
+                });
+                logging.SetMinimumLevel(LogLevel.Information);
+            })
+            .ConfigureServices((context, services) =>
+            {
+                var configuration = context.Configuration;
+
+                // 🔹 SQL Factory (Singleton)
+                services.AddSingleton<SqlConnectionFactory>(sp =>
+                    new SqlConnectionFactory(
+                        configuration.GetConnectionString("DefaultConnection")
+                    )
+                );
+
+                // 🔹 ESTE DEBE SER SCOPED
+                services.AddScoped<RequestApprovalService>();
+
+                // 🔹 Worker
+                services.AddHostedService<Worker>();
+            })
+            .Build();
+
+        await host.RunAsync();
+    }
+}

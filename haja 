@@ -174,3 +174,18 @@ var host = Host.CreateDefaultBuilder(args)
     .Build();
 
 await host.RunAsync();
+
+
+
+SELECT TOP 50
+    se.state_entity_id,
+    e.entity_name,
+    s.state_name,
+    se.create_at,
+    se.modify_at
+FROM dbo.state_entities se
+INNER JOIN dbo.entities e ON e.entity_id = se.entity_id
+INNER JOIN dbo.states   s ON s.state_id   = se.state_id
+WHERE e.entity_name IN ('Request', 'Requests', 'Request Approval', 'Solicitud')
+  AND s.state_name IN ('Pendiente', 'Pending')
+ORDER BY se.create_at DESC;

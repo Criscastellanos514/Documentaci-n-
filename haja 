@@ -489,3 +489,36 @@ using System.Threading.Tasks;
 using Dapper;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+
+
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using System.Data;
+using Microsoft.Data.SqlClient;
+
+namespace PruebaWorker
+{
+    public static class Services
+    {
+        public static void ConfigureServices(
+            HostBuilderContext context,
+            IServiceCollection services)
+        {
+            IConfiguration configuration = context.Configuration;
+
+            // Connection Factory
+            services.AddSingleton<SqlConnectionFactory>(sp =>
+                new SqlConnectionFactory(
+                    configuration.GetConnectionString("DefaultConnection")
+                )
+            );
+
+            // Servicio principal
+            services.AddSingleton<RequestApprovalService>();
+
+            // Worker
+            services.AddHostedService<Worker>();
+        }
+    }
+}

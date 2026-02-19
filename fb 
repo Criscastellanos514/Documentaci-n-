@@ -500,3 +500,37 @@ public class MessageBroker : IMessageBroker
         return Task.CompletedTask;
     }
 }
+
+
+
+
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Worker;
+
+var host = Host.CreateDefaultBuilder(args)
+    .ConfigureLogging(logging =>
+    {
+        logging.ClearProviders();
+        logging.AddSimpleConsole(o =>
+        {
+            o.SingleLine = true;
+            o.TimestampFormat = "HH:mm:ss ";
+        });
+        logging.SetMinimumLevel(LogLevel.Information);
+    })
+    .ConfigureServices((context, services) =>
+    {
+        // 1) DB Factory (Singleton)
+        services.AddSingleton<SqlConnectionFactory>();
+
+        // 2) Servicios (Scoped)
+        services.AddScoped<RequestApprovalService>();
+
+        // 3) Worker (HostedService)
+        services.AddHostedService<Worker.Worker>();
+    })
+    .Build();
+
+await host.RunAsync();

@@ -1,0 +1,26 @@
+{
+  "ConnectionStrings": {
+    "Default": "Server=TU_SERVIDOR;Database=control_inventario_ti;User Id=TU_USER;Password=TU_PASSWORD;TrustServerCertificate=True;"
+  },
+  "Worker": {
+    "IntervalSeconds": 30,
+    "DryRun": false,
+    "BatchSize": 10
+  },
+  "Broker": {
+    "Url": "http://localhost:5050",
+    "Topic": "request_approval"
+  },
+  "States": {
+    "Pendiente":   "1701686C-649B-4560-BC69-D307D5E7F728",
+    "EnRevision":  "F27EF7A8-793B-4237-AA99-20E39A51D785",
+    "Aprobado":    "1B993444-0E62-4414-9E37-62030A154761",
+    "Rechazado":   "TODO"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.Hosting.Lifetime": "Information"
+    }
+  }
+}

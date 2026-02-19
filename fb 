@@ -485,3 +485,18 @@ public static class Program
         await host.RunAsync();
     }
 }
+namespace PruebaWorker.Services;
+
+public interface IMessageBroker
+{
+    Task PublishAsync(string message, CancellationToken ct = default);
+}
+
+public class MessageBroker : IMessageBroker
+{
+    public Task PublishAsync(string message, CancellationToken ct = default)
+    {
+        // placeholder: aquí luego metes RabbitMQ/HTTP/etc.
+        return Task.CompletedTask;
+    }
+}

@@ -145,3 +145,26 @@ public class HttpPollingBroker : IMessageBroker
     }
 }
 
+
+
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
+
+namespace ApprovalWorker.Data;
+
+public class SqlConnectionFactory
+{
+    private readonly string _connectionString;
+
+    public SqlConnectionFactory(IConfiguration configuration)
+    {
+        _connectionString = configuration.GetConnectionString("Default")
+            ?? throw new InvalidOperationException("ConnectionString 'Default' no configurada.");
+    }
+
+    public SqlConnection CreateConnection()
+    {
+        return new SqlConnection(_connectionString);
+    }
+}
+

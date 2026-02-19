@@ -1,0 +1,5 @@
+dotnet add package Microsoft.Extensions.Hosting
+dotnet add package Microsoft.Extensions.Configuration.Json
+dotnet add package Microsoft.Extensions.Http
+dotnet add package Microsoft.Data.SqlClient
+dotnet add package Dapper

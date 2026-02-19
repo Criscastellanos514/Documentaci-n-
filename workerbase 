@@ -48,3 +48,206 @@ public class ApprovalMessage
     public string RequestStateDescription { get; set; } = string.Empty;
     public DateTimeOffset CreateAt { get; set; }
 }
+
+using Dapper;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using ApprovalWorker.Data;
+
+namespace ApprovalWorker.Services;
+
+public class RequestApprovalService
+{
+    private readonly SqlConnectionFactory _connectionFactory;
+    private readonly ILogger<RequestApprovalService> _logger;
+    private readonly bool _dryRun;
+    private readonly int _batchSize;
+
+    private readonly Guid _estadoPendiente;
+    private readonly Guid _estadoEnRevision;
+
+    public RequestApprovalService(
+        SqlConnectionFactory connectionFactory,
+        IConfiguration configuration,
+        ILogger<RequestApprovalService> logger)
+    {
+        _connectionFactory = connectionFactory;
+        _logger            = logger;
+        _dryRun            = configuration.GetValue<bool>("Worker:DryRun");
+        _batchSize         = configuration.GetValue<int>("Worker:BatchSize", 10);
+
+        _estadoPendiente  = Guid.Parse(configuration["States:Pendiente"]
+            ?? throw new InvalidOperationException("States:Pendiente no configurado."));
+        _estadoEnRevision = Guid.Parse(configuration["States:EnRevision"]
+            ?? throw new InvalidOperationException("States:EnRevision no configurado."));
+    }
+
+    // ─── GET PENDIENTES ───────────────────────────────────────────────────────
+
+    public async Task<IEnumerable<PendingRequest>> GetPendientesAsync()
+    {
+        const string sql = """
+            SELECT TOP (@BatchSize)
+                r.request_id        AS RequestId,
+                r.user_id           AS UserId,
+                r.state_entity_id   AS StateEntityId,
+                r.request_name      AS RequestName,
+                r.request_description AS RequestDescription,
+                r.request_date_start  AS RequestDateStart,
+                r.request_date_finish AS RequestDateFinish,
+                r.create_at         AS CreateAt,
+                r.area_id           AS AreaId,
+                r.request_visibility  AS RequestVisibility,
+                r.request_enabled     AS RequestEnabled,
+                s.state_name        AS StateName
+            FROM dbo.requests r
+            INNER JOIN dbo.state_entities se ON se.state_entity_id = r.state_entity_id
+            INNER JOIN dbo.states s          ON s.state_id         = se.state_id
+            INNER JOIN dbo.entities e        ON e.entity_id        = se.entity_id
+            WHERE r.state_entity_id = @EstadoPendiente
+              AND e.entity_name     = 'Request'
+              AND r.request_enabled = 1
+            ORDER BY r.create_at ASC
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+
+        var results = await connection.QueryAsync<PendingRequest>(sql, new
+        {
+            BatchSize       = _batchSize,
+            EstadoPendiente = _estadoPendiente
+        });
+
+        _logger.LogInformation("Requests pendientes encontradas: {Count}", results.Count());
+        return results;
+    }
+
+    // ─── PROCESAR REQUEST ─────────────────────────────────────────────────────
+
+    public async Task ProcesarRequestAsync(Guid requestId, Guid userId, string requestName)
+    {
+        _logger.LogInformation(
+            "Procesando RequestId={RequestId} UserId={UserId} Nombre='{RequestName}'",
+            requestId, userId, requestName);
+
+        if (_dryRun)
+        {
+            _logger.LogWarning("[DryRun] Omitiendo escritura para RequestId={RequestId}", requestId);
+            return;
+        }
+
+        // Verifica que exista y esté pendiente antes de tocarla
+        var existe = await ExisteYEstaPendienteAsync(requestId);
+
+        if (!existe)
+        {
+            _logger.LogWarning(
+                "RequestId={RequestId} no existe o ya no está en estado Pendiente. Se omite.",
+                requestId);
+            return;
+        }
+
+        await MarcarEnRevisionAsync(requestId);
+    }
+
+    // ─── MARCAR EN REVISIÓN ───────────────────────────────────────────────────
+
+    public async Task MarcarEnRevisionAsync(Guid requestId)
+    {
+        if (_dryRun)
+        {
+            _logger.LogWarning("[DryRun] Omitiendo cambio de estado para RequestId={RequestId}", requestId);
+            return;
+        }
+
+        const string sql = """
+            UPDATE dbo.requests
+            SET state_entity_id = @EstadoEnRevision,
+                modify_at       = @ModifyAt
+            WHERE request_id    = @RequestId
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+
+        var rows = await connection.ExecuteAsync(sql, new
+        {
+            RequestId        = requestId,
+            EstadoEnRevision = _estadoEnRevision,
+            ModifyAt         = DateTimeOffset.UtcNow
+        });
+
+        if (rows > 0)
+            _logger.LogInformation("RequestId={RequestId} → En revisión", requestId);
+        else
+            _logger.LogWarning("RequestId={RequestId} no fue actualizada.", requestId);
+    }
+
+    // ─── MARCAR ESTADO GENÉRICO (Aprobado / Rechazado) ───────────────────────
+
+    public async Task MarcarEstadoAsync(Guid requestId, Guid nuevoStateEntityId)
+    {
+        if (_dryRun)
+        {
+            _logger.LogWarning("[DryRun] Omitiendo cambio de estado para RequestId={RequestId}", requestId);
+            return;
+        }
+
+        const string sql = """
+            UPDATE dbo.requests
+            SET state_entity_id = @NuevoEstado,
+                modify_at       = @ModifyAt
+            WHERE request_id    = @RequestId
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+
+        await connection.ExecuteAsync(sql, new
+        {
+            RequestId   = requestId,
+            NuevoEstado = nuevoStateEntityId,
+            ModifyAt    = DateTimeOffset.UtcNow
+        });
+
+        _logger.LogInformation("RequestId={RequestId} → Estado={Estado}", requestId, nuevoStateEntityId);
+    }
+
+    // ─── PRIVATE ──────────────────────────────────────────────────────────────
+
+    private async Task<bool> ExisteYEstaPendienteAsync(Guid requestId)
+    {
+        const string sql = """
+            SELECT COUNT(1)
+            FROM dbo.requests
+            WHERE request_id      = @RequestId
+              AND state_entity_id = @EstadoPendiente
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+
+        var count = await connection.ExecuteScalarAsync<int>(sql, new
+        {
+            RequestId       = requestId,
+            EstadoPendiente = _estadoPendiente
+        });
+
+        return count > 0;
+    }
+}
+
+// ─── DTO ──────────────────────────────────────────────────────────────────────
+
+public class PendingRequest
+{
+    public Guid RequestId { get; set; }
+    public Guid UserId { get; set; }
+    public Guid StateEntityId { get; set; }
+    public Guid AreaId { get; set; }
+    public string RequestName { get; set; } = string.Empty;
+    public string RequestDescription { get; set; } = string.Empty;
+    public DateTimeOffset RequestDateStart { get; set; }
+    public DateTimeOffset RequestDateFinish { get; set; }
+    public DateTimeOffset CreateAt { get; set; }
+    public bool RequestVisibility { get; set; }
+    public bool RequestEnabled { get; set; }
+    public string StateName { get; set; } = string.Empty;
+}

@@ -251,3 +251,17 @@ WHERE state_entity_id = @pendingStateId
 ORDER BY create_at DESC;",
 new { batchSize, pendingStateId }))
 .ToList();
+
+
+var enProcesoStateId = Guid.Parse("F27EF7A8-793B-4237-AA99-20E39A51D785"); // <-- revisa el correcto
+
+var updated = await conn.ExecuteAsync(@"
+UPDATE requests
+SET state_entity_id = @enProcesoStateId
+WHERE request_id = @request_id
+AND state_entity_id = @pendingStateId;",
+new {
+    request_id = req.request_id,
+    enProcesoStateId,
+    pendingStateId
+}, tx);p

@@ -375,3 +375,83 @@ public class HttpPollingBroker : IMessageBroker
         _logger.LogInformation("Mensaje publicado en topic '{Topic}': RequestId={RequestId}", topic, message.RequestId);
     }
 }
+
+
+using System.Text.Json;
+using MessageBroker.Client;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+
+namespace ApprovalWorker.Messaging;
+
+public class HttpPollingBroker : IMessageBroker
+{
+    private readonly ILogger<HttpPollingBroker> _logger;
+    private readonly MessageBrokerConfig? _config;
+
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    public HttpPollingBroker(IConfiguration configuration, ILogger<HttpPollingBroker> logger)
+    {
+        _logger = logger;
+        _config = new MessageBrokerConfig
+        {
+            AutoReconnect           = true,
+            PingIntervalSeconds     = 30,
+            HeartbeatTimeoutSeconds = 45,
+            MaxReconnectAttempts    = 0,
+            EnableVerboseLogging    = true
+        };
+    }
+
+    // ─── SUBSCRIBE ────────────────────────────────────────────────────────────
+
+    public async Task SubscribeAsync(string topic, Func<ApprovalMessage, Task> handler, CancellationToken cancellationToken)
+    {
+        var client = new MessageBrokerClient(_config);
+
+        await client.ConnectAsync(cancellationToken);
+        await client.SubscribeAsync(topic);
+
+        _logger.LogInformation("Suscrito al topic '{Topic}'.", topic);
+
+        client.Messages.Subscribe(async msg =>
+        {
+            try
+            {
+                if (msg.topic != topic) return;
+
+                var approval = msg.data.Deserialize<ApprovalMessage>(_jsonOptions);
+                if (approval is null) return;
+
+                _logger.LogInformation("Mensaje recibido — RequestId={RequestId}", approval.RequestId);
+                await handler(approval);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error procesando mensaje del topic '{Topic}'.", topic);
+            }
+        });
+
+        // Mantiene viva la suscripción hasta que se cancele
+        await Task.Delay(Timeout.Infinite, cancellationToken).ContinueWith(_ => { });
+
+        await client.DisconnectAsync();
+    }
+
+    // ─── PUBLISH ──────────────────────────────────────────────────────────────
+
+    public async Task PublishAsync(string topic, ApprovalMessage message, CancellationToken cancellationToken)
+    {
+        var client = new MessageBrokerClient(_config);
+
+        await client.ConnectAsync(cancellationToken);
+        await client.PublishAsync(topic, message, persistent: false);
+        await client.DisconnectAsync();
+
+        _logger.LogInformation("Mensaje publicado en topic '{Topic}': RequestId={RequestId}", topic, message.RequestId);
+    }
+}

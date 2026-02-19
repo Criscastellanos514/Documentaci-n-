@@ -26,3 +26,15 @@ dotnet add package Dapper
 }
 
 
+namespace ApprovalWorker.Messaging;
+
+public class ApprovalMessage
+{
+    public Guid RequestId { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public Guid UserId { get; set; }
+    public DateTime Timestamp { get; set; }
+}
+
+

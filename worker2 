@@ -168,3 +168,128 @@ public class SqlConnectionFactory
     }
 }
 
+
+using Dapper;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using ApprovalWorker.Data;
+
+namespace ApprovalWorker.Services;
+
+public class RequestApprovalService
+{
+    private readonly SqlConnectionFactory _connectionFactory;
+    private readonly ILogger<RequestApprovalService> _logger;
+    private readonly bool _dryRun;
+    private readonly int _batchSize;
+
+    public RequestApprovalService(
+        SqlConnectionFactory connectionFactory,
+        IConfiguration configuration,
+        ILogger<RequestApprovalService> logger)
+    {
+        _connectionFactory = connectionFactory;
+        _logger = logger;
+        _dryRun = configuration.GetValue<bool>("Worker:DryRun");
+        _batchSize = configuration.GetValue<int>("Worker:BatchSize", 10);
+    }
+
+    // ─── GET PENDIENTES ───────────────────────────────────────────────────────
+
+    public async Task<IEnumerable<PendingRequest>> GetPendientesAsync()
+    {
+        const string sql = """
+            SELECT TOP (@BatchSize)
+                RequestId,
+                UserId,
+                Description,
+                Name,
+                Status,
+                CreatedAt
+            FROM Requests
+            WHERE Status = 'Pending'
+            ORDER BY CreatedAt ASC
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<PendingRequest>(sql, new { BatchSize = _batchSize });
+
+        _logger.LogInformation("Se encontraron {Count} requests pendientes.", results.Count());
+        return results;
+    }
+
+    // ─── PROCESAR REQUEST ─────────────────────────────────────────────────────
+
+    public async Task ProcesarRequestAsync(Guid requestId, Guid userId, string description)
+    {
+        _logger.LogInformation("Procesando RequestId={RequestId} UserId={UserId}", requestId, userId);
+
+        if (_dryRun)
+        {
+            _logger.LogWarning("[DryRun] Se omite escritura en BD para RequestId={RequestId}", requestId);
+            return;
+        }
+
+        const string insertSql = """
+            IF NOT EXISTS (SELECT 1 FROM Requests WHERE RequestId = @RequestId)
+            BEGIN
+                INSERT INTO Requests (RequestId, UserId, Description, Status, CreatedAt)
+                VALUES (@RequestId, @UserId, @Description, 'Pending', @CreatedAt)
+            END
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+
+        await connection.ExecuteAsync(insertSql, new
+        {
+            RequestId  = requestId,
+            UserId     = userId,
+            Description = description,
+            CreatedAt  = DateTime.UtcNow
+        });
+
+        _logger.LogInformation("RequestId={RequestId} guardado correctamente.", requestId);
+
+        await MarcarEstadoAsync(requestId, "Processing");
+    }
+
+    // ─── MARCAR ESTADO ────────────────────────────────────────────────────────
+
+    public async Task MarcarEstadoAsync(Guid requestId, string nuevoEstado)
+    {
+        if (_dryRun)
+        {
+            _logger.LogWarning("[DryRun] Se omite cambio de estado para RequestId={RequestId} → {Estado}", requestId, nuevoEstado);
+            return;
+        }
+
+        const string sql = """
+            UPDATE Requests
+            SET Status = @Estado, UpdatedAt = @UpdatedAt
+            WHERE RequestId = @RequestId
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+
+        await connection.ExecuteAsync(sql, new
+        {
+            RequestId  = requestId,
+            Estado     = nuevoEstado,
+            UpdatedAt  = DateTime.UtcNow
+        });
+
+        _logger.LogInformation("RequestId={RequestId} → Estado={Estado}", requestId, nuevoEstado);
+    }
+}
+
+// ─── DTO INTERNO ──────────────────────────────────────────────────────────────
+
+public class PendingRequest
+{
+    public Guid RequestId { get; set; }
+    public Guid UserId { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+}

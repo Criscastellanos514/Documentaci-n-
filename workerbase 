@@ -291,3 +291,9 @@ private async Task RunPeriodicPollingAsync(CancellationToken stoppingToken)
         }
     }
 }
+
+
+
+"ConnectionStrings": {
+  "Default": "Server=HNCSTG010240WAP\\HNCSTG010240WAP;Database=control_inventario_ti;Integrated Security=True;TrustServerCertificate=True;"
+}

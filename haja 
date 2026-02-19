@@ -265,3 +265,217 @@ new {
     enProcesoStateId,
     pendingStateId
 }, tx);p
+
+
+
+
+
+using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Dapper;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace PruebaWorker
+{
+    public class Worker : BackgroundService
+    {
+        private readonly ILogger<Worker> _logger;
+        private readonly SqlConnectionFactory _factory;
+        private readonly IServiceScopeFactory _scopeFactory;
+
+        private readonly int _intervalSeconds;
+        private readonly bool _dryRun;
+
+        // ✅ Ajusta estos GUID a los reales en tu BD
+        private static readonly Guid PendingStateEntityId   = Guid.Parse("1701686C-649B-4560-BC69-D307D5E7F728"); // Pendiente (Request)
+        private static readonly Guid InProcessStateEntityId  = Guid.Parse("F27EF7A8-793B-4237-AA99-20E39A51D785"); // En revisión / EnProceso (Request)
+
+        public Worker(
+            ILogger<Worker> logger,
+            SqlConnectionFactory factory,
+            IServiceScopeFactory scopeFactory,
+            WorkerSettings settings)
+        {
+            _logger = logger;
+            _factory = factory;
+            _scopeFactory = scopeFactory;
+            _intervalSeconds = settings.IntervalSeconds;
+            _dryRun = settings.DryRun;
+        }
+
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        {
+            _logger.LogInformation("Worker iniciado. IntervalSeconds={Interval} DryRun={DryRun}",
+                _intervalSeconds, _dryRun);
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await ProcessBatchAsync(batchSize: 10, stoppingToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error general del Worker.");
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(_intervalSeconds), stoppingToken);
+            }
+        }
+
+        private async Task ProcessBatchAsync(int batchSize, CancellationToken ct)
+        {
+            using var conn = _factory.Create();
+            conn.Open();
+
+            // 1) Traer requests pendientes (por state_entity_id)
+            var pending = (await conn.QueryAsync<RequestRow>(@"
+                SELECT TOP (@batchSize)
+                    request_id,
+                    user_id,
+                    state_entity_id
+                FROM dbo.requests
+                WHERE state_entity_id = @pendingState
+                ORDER BY create_at DESC;",
+                new { batchSize, pendingState = PendingStateEntityId }
+            )).ToList();
+
+            if (pending.Count == 0)
+            {
+                _logger.LogInformation("No encontré requests en estado Pendiente.");
+                return;
+            }
+
+            _logger.LogInformation("Pendientes encontrados: {Count}", pending.Count);
+
+            foreach (var req in pending)
+            {
+                if (ct.IsCancellationRequested) break;
+
+                using var tx = conn.BeginTransaction();
+
+                try
+                {
+                    // 2) Marcar como "EnProceso" con candado optimista
+                    var updated = await conn.ExecuteAsync(@"
+                        UPDATE dbo.requests
+                        SET state_entity_id = @inProcess
+                        WHERE request_id = @requestId
+                          AND state_entity_id = @pending;",
+                        new
+                        {
+                            requestId = req.request_id,
+                            pending = PendingStateEntityId,
+                            inProcess = InProcessStateEntityId
+                        },
+                        tx
+                    );
+
+                    if (updated == 0)
+                    {
+                        _logger.LogWarning("Request {RequestId} ya no está Pendiente (otro proceso lo tomó).", req.request_id);
+                        tx.Rollback();
+                        continue;
+                    }
+
+                    _logger.LogInformation("Procesando RequestId={RequestId} UserId={UserId} DryRun={DryRun}",
+                        req.request_id, req.user_id, _dryRun);
+
+                    if (!_dryRun)
+                    {
+                        // ✅ IMPORTANTE: Crear scope aquí (Worker es Singleton)
+                        using var scope = _scopeFactory.CreateScope();
+                        var approvalService = scope.ServiceProvider.GetRequiredService<RequestApprovalService>();
+
+                        // 3) Tu lógica real: inserta approvals / crea tasks / etc.
+                        await approvalService.InsertApprovalForRequestAsync(req.request_id, req.user_id);
+
+                        // 4) (Opcional) Marcar como Aprobada / En revision según tu flujo
+                        await conn.ExecuteAsync(@"
+                            UPDATE dbo.requests
+                            SET request_state_description = 'Aprobada'
+                            WHERE request_id = @requestId;",
+                            new { requestId = req.request_id }, tx);
+                    }
+
+                    tx.Commit();
+
+                    _logger.LogInformation("OK RequestId={RequestId}", req.request_id);
+                }
+                catch (Exception ex)
+                {
+                    try
+                    {
+                        // (Opcional) marcar Error
+                        await conn.ExecuteAsync(@"
+                            UPDATE dbo.requests
+                            SET request_state_description = 'Error'
+                            WHERE request_id = @requestId;",
+                            new { requestId = req.request_id }, tx);
+                    }
+                    catch { /* si falla no bloquea el rollback */ }
+
+                    tx.Rollback();
+                    _logger.LogError(ex, "Falló RequestId={RequestId}", req.request_id);
+                }
+            }
+        }
+
+        private sealed record RequestRow(Guid request_id, Guid user_id, Guid state_entity_id);
+    }
+
+    public sealed class WorkerSettings
+    {
+        public int IntervalSeconds { get; set; } = 10;
+        public bool DryRun { get; set; } = false;
+    }
+}
+
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+
+namespace PruebaWorker
+{
+    public static class Program
+    {
+        public static async Task Main(string[] args)
+        {
+            var host = Host.CreateDefaultBuilder(args)
+                .ConfigureLogging(logging =>
+                {
+                    logging.ClearProviders();
+                    logging.AddSimpleConsole(o =>
+                    {
+                        o.SingleLine = true;
+                        o.TimestampFormat = "HH:mm:ss ";
+                    });
+                    logging.SetMinimumLevel(LogLevel.Information);
+                })
+                .ConfigureServices((context, services) =>
+                {
+                    // Settings
+                    var settings = new WorkerSettings();
+                    context.Configuration.GetSection("Worker").Bind(settings);
+                    services.AddSingleton(settings);
+
+                    // DB Factory (normalmente Singleton)
+                    services.AddSingleton<SqlConnectionFactory>();
+
+                    // ✅ Service scoped (lo consumes con scope dentro del Worker)
+                    services.AddScoped<RequestApprovalService>();
+
+                    // Worker (HostedService) => Singleton
+                    services.AddHostedService<Worker>();
+                })
+                .Build();
+
+            await host.RunAsync();
+        }
+    }
+}

@@ -236,3 +236,27 @@ public async Task<int> UpdatePendingToReviewIfCompleteAsync(Guid requestId, Canc
 
     return rows;
 }
+
+
+
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using PruebaWorker;
+using PruebaWorker.Data;
+using PruebaWorker.Services;
+
+var host = Host.CreateDefaultBuilder(args)
+    .ConfigureServices((context, services) =>
+    {
+        // 🔹 Factory de conexión
+        services.AddSingleton<SqlConnectionFactory>();
+
+        // 🔹 Servicio de aprobaciones
+        services.AddScoped<RequestApprovalService>();
+
+        // 🔹 Worker principal
+        services.AddHostedService<Worker>();
+    })
+    .Build();
+
+await host.RunAsync();

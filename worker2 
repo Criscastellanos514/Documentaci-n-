@@ -48,3 +48,100 @@ public interface IMessageBroker
 }
 
 
+using System.Text;
+using System.Text.Json;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+
+namespace ApprovalWorker.Messaging;
+
+public class HttpPollingBroker : IMessageBroker
+{
+    private readonly HttpClient _httpClient;
+    private readonly ILogger<HttpPollingBroker> _logger;
+    private readonly string _baseUrl;
+    private readonly TimeSpan _pollingInterval = TimeSpan.FromSeconds(5);
+
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    public HttpPollingBroker(HttpClient httpClient, IConfiguration configuration, ILogger<HttpPollingBroker> logger)
+    {
+        _httpClient = httpClient;
+        _logger = logger;
+        _baseUrl = configuration["Broker:Url"] ?? throw new InvalidOperationException("Broker:Url no configurado.");
+    }
+
+    // ─── SUBSCRIBE ────────────────────────────────────────────────────────────
+
+    public async Task SubscribeAsync(string topic, Func<ApprovalMessage, Task> handler, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Suscrito al topic '{Topic}'. Polling cada {Interval}s.", topic, _pollingInterval.TotalSeconds);
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                var messages = await PollMessagesAsync(topic, cancellationToken);
+
+                foreach (var message in messages)
+                {
+                    _logger.LogInformation("Mensaje recibido del topic '{Topic}': RequestId={RequestId}", topic, message.RequestId);
+                    await handler(message);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error durante el polling del topic '{Topic}'.", topic);
+            }
+
+            await Task.Delay(_pollingInterval, cancellationToken);
+        }
+
+        _logger.LogInformation("Suscripción al topic '{Topic}' finalizada.", topic);
+    }
+
+    // ─── PUBLISH ──────────────────────────────────────────────────────────────
+
+    public async Task PublishAsync(string topic, ApprovalMessage message, CancellationToken cancellationToken)
+    {
+        var url = $"{_baseUrl}/topics/{topic}/messages";
+        var json = JsonSerializer.Serialize(message);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        var response = await _httpClient.PostAsync(url, content, cancellationToken);
+
+        if (response.IsSuccessStatusCode)
+            _logger.LogInformation("Mensaje publicado en topic '{Topic}': RequestId={RequestId}", topic, message.RequestId);
+        else
+            _logger.LogWarning("Error al publicar en topic '{Topic}': {StatusCode}", topic, response.StatusCode);
+    }
+
+    // ─── PRIVATE ──────────────────────────────────────────────────────────────
+
+    private async Task<List<ApprovalMessage>> PollMessagesAsync(string topic, CancellationToken cancellationToken)
+    {
+        var url = $"{_baseUrl}/topics/{topic}/messages";
+        var response = await _httpClient.GetAsync(url, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Polling sin respuesta exitosa: {StatusCode}", response.StatusCode);
+            return [];
+        }
+
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(json))
+            return [];
+
+        return JsonSerializer.Deserialize<List<ApprovalMessage>>(json, _jsonOptions) ?? [];
+    }
+}
+

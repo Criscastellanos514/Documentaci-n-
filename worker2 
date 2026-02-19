@@ -293,3 +293,136 @@ public class PendingRequest
     public string Status { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
 }
+
+
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using ApprovalWorker.Messaging;
+using ApprovalWorker.Services;
+
+namespace ApprovalWorker;
+
+public class Worker : BackgroundService
+{
+    private readonly IMessageBroker _broker;
+    private readonly RequestApprovalService _approvalService;
+    private readonly ILogger<Worker> _logger;
+    private readonly string _topic;
+    private readonly TimeSpan _interval;
+
+    public Worker(
+        IMessageBroker broker,
+        RequestApprovalService approvalService,
+        IConfiguration configuration,
+        ILogger<Worker> logger)
+    {
+        _broker          = broker;
+        _approvalService = approvalService;
+        _logger          = logger;
+        _topic           = configuration["Broker:Topic"]
+                               ?? throw new InvalidOperationException("Broker:Topic no configurado.");
+        _interval        = TimeSpan.FromSeconds(
+                               configuration.GetValue<int>("Worker:IntervalSeconds", 30));
+    }
+
+    // ─── ENTRY POINT ──────────────────────────────────────────────────────────
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        _logger.LogInformation("Worker iniciado. Topic='{Topic}' Intervalo={Interval}s",
+            _topic, _interval.TotalSeconds);
+
+        // Lanza la suscripción al topic en paralelo
+        var subscriptionTask = SubscribeToTopicAsync(stoppingToken);
+
+        // Polling de respaldo cada X segundos
+        var pollingTask = RunPeriodicPollingAsync(stoppingToken);
+
+        await Task.WhenAll(subscriptionTask, pollingTask);
+
+        _logger.LogInformation("Worker detenido.");
+    }
+
+    // ─── SUSCRIPCIÓN AL TOPIC ─────────────────────────────────────────────────
+
+    private async Task SubscribeToTopicAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            await _broker.SubscribeAsync(_topic, HandleMessageAsync, stoppingToken);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("Suscripción al topic cancelada limpiamente.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fatal en la suscripción al topic '{Topic}'.", _topic);
+        }
+    }
+
+    // ─── HANDLER DE MENSAJES ──────────────────────────────────────────────────
+
+    private async Task HandleMessageAsync(ApprovalMessage message)
+    {
+        _logger.LogInformation(
+            "Mensaje recibido — RequestId={RequestId} UserId={UserId} Timestamp={Timestamp}",
+            message.RequestId, message.UserId, message.Timestamp);
+
+        try
+        {
+            var description = string.IsNullOrWhiteSpace(message.Description)
+                ? message.Name
+                : message.Description;
+
+            await _approvalService.ProcesarRequestAsync(
+                message.RequestId,
+                message.UserId,
+                description);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error procesando RequestId={RequestId}.", message.RequestId);
+        }
+    }
+
+    // ─── POLLING DE RESPALDO ──────────────────────────────────────────────────
+
+    private async Task RunPeriodicPollingAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(_interval, stoppingToken);
+
+                _logger.LogInformation("Revisión periódica iniciada.");
+
+                var pendientes = await _approvalService.GetPendientesAsync();
+
+                foreach (var request in pendientes)
+                {
+                    _logger.LogInformation(
+                        "Procesando pendiente — RequestId={RequestId} UserId={UserId}",
+                        request.RequestId, request.UserId);
+
+                    await _approvalService.ProcesarRequestAsync(
+                        request.RequestId,
+                        request.UserId,
+                        string.IsNullOrWhiteSpace(request.Description)
+                            ? request.Name
+                            : request.Description);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error durante la revisión periódica.");
+            }
+        }
+    }
+}

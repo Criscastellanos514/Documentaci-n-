@@ -361,3 +361,10 @@ public sealed class NoOpMessageBroker : IMessageBroker
         return Task.CompletedTask;
     }
 }
+
+
+SELECT *
+FROM requests r
+JOIN state_entities se ON r.state_entity_id = se.state_entity_id
+JOIN states s ON se.state_id = s.state_id
+WHERE s.state_name = 'Pendiente'

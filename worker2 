@@ -3,3 +3,26 @@ dotnet add package Microsoft.Extensions.Configuration.Json
 dotnet add package Microsoft.Extensions.Http
 dotnet add package Microsoft.Data.SqlClient
 dotnet add package Dapper
+
+{
+  "ConnectionStrings": {
+    "Default": "Server=localhost;Database=ApprovalDB;User Id=sa;Password=YourPassword123;TrustServerCertificate=True;"
+  },
+  "Worker": {
+    "IntervalSeconds": 30,
+    "DryRun": false,
+    "BatchSize": 10
+  },
+  "Broker": {
+    "Url": "http://localhost:5050",
+    "Topic": "request_approval"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.Hosting.Lifetime": "Information"
+    }
+  }
+}
+
+

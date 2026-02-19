@@ -215,3 +215,39 @@ INNER JOIN dbo.state_entities se ON se.state_entity_id = r.state_entity_id
 INNER JOIN dbo.entities e ON e.entity_id = se.entity_id
 INNER JOIN dbo.states s ON s.state_id = se.state_id
 ORDER BY r.create_at DESC;
+
+"Worker": {
+  "PendingStateEntityId": "1701686C-649B-4560-BC69-D307D5E7F728",
+  "RevisionStateEntityId": "F27EF7A8-793B-4237-AA99-20E39A51D785"
+}
+
+var pendingStateEntityId = _config.GetValue<Guid>("Worker:PendingStateEntityId");
+
+
+var requests = await conn.QueryAsync<RequestDto>(
+@"
+SELECT TOP (@batchSize)
+    request_id,
+    request_name,
+    request_description,
+    state_entity_id,
+    create_at
+FROM dbo.requests
+WHERE state_entity_id = @pendingStateEntityId
+ORDER BY create_at ASC
+",
+new { batchSize, pendingStateEntityId });
+
+
+var pendingStateId = Guid.Parse("1701686C-649B-4560-BC69-D307D5E7F728");
+
+var pending = (await conn.QueryAsync<RequestRow>(@"
+SELECT TOP (@batchSize)
+    request_id,
+    user_id,
+    state_entity_id
+FROM dbo.requests
+WHERE state_entity_id = @pendingStateId
+ORDER BY create_at DESC;",
+new { batchSize, pendingStateId }))
+.ToList();

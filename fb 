@@ -440,3 +440,48 @@ using (var scope = _scopeFactory.CreateScope())
 
     await approvalService.TuMetodoAsync();
 }
+
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+using PruebaWorker.Data;
+using PruebaWorker.Services;
+
+namespace PruebaWorker;
+
+public static class Program
+{
+    public static async Task Main(string[] args)
+    {
+        var host = Host.CreateDefaultBuilder(args)
+            .ConfigureLogging(logging =>
+            {
+                logging.ClearProviders();
+                logging.AddSimpleConsole(o =>
+                {
+                    o.SingleLine = true;
+                    o.TimestampFormat = "HH:mm:ss ";
+                });
+                logging.SetMinimumLevel(LogLevel.Information);
+            })
+            .ConfigureServices((context, services) =>
+            {
+                // 1) Factory DB (recibe IConfiguration)
+                services.AddSingleton<SqlConnectionFactory>();
+
+                // 2) Tu servicio (para evitar error de scoped con Worker)
+                services.AddSingleton<RequestApprovalService>();
+
+                // 3) Broker (si ya tienes implementación, regístrala aquí)
+                services.AddSingleton<IMessageBroker, MessageBroker>();
+
+                // 4) Worker
+                services.AddHostedService<Worker>();
+            })
+            .Build();
+
+        await host.RunAsync();
+    }
+}

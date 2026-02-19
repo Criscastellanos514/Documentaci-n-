@@ -24,3 +24,27 @@
     }
   }
 }
+
+
+
+namespace ApprovalWorker.Messaging;
+
+public class ApprovalMessage
+{
+    public Guid RequestId { get; set; }
+    public Guid UserId { get; set; }
+    public Guid StateEntityId { get; set; }
+    public Guid PriorityId { get; set; }
+    public Guid WorkTypeId { get; set; }
+    public Guid RequestTypeId { get; set; }
+    public Guid AreaId { get; set; }
+    public Guid? RequestPrimaryId { get; set; }
+    public string RequestName { get; set; } = string.Empty;
+    public string RequestDescription { get; set; } = string.Empty;
+    public DateTimeOffset RequestDateStart { get; set; }
+    public DateTimeOffset RequestDateFinish { get; set; }
+    public bool RequestVisibility { get; set; }
+    public bool RequestEnabled { get; set; }
+    public string RequestStateDescription { get; set; } = string.Empty;
+    public DateTimeOffset CreateAt { get; set; }
+}

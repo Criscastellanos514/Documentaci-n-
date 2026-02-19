@@ -297,3 +297,81 @@ private async Task RunPeriodicPollingAsync(CancellationToken stoppingToken)
 "ConnectionStrings": {
   "Default": "Server=HNCSTG010240WAP\\HNCSTG010240WAP;Database=control_inventario_ti;Integrated Security=True;TrustServerCertificate=True;"
 }
+
+
+
+using System.Text.Json;
+using MessageBroker.Client;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+
+namespace ApprovalWorker.Messaging;
+
+public class HttpPollingBroker : IMessageBroker
+{
+    private readonly ILogger<HttpPollingBroker> _logger;
+    private readonly string _brokerUrl;
+
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    public HttpPollingBroker(IConfiguration configuration, ILogger<HttpPollingBroker> logger)
+    {
+        _logger    = logger;
+        _brokerUrl = configuration["Broker:Url"]
+            ?? throw new InvalidOperationException("Broker:Url no configurado.");
+    }
+
+    // ─── SUBSCRIBE ────────────────────────────────────────────────────────────
+
+    public async Task SubscribeAsync(string topic, Func<ApprovalMessage, Task> handler, CancellationToken cancellationToken)
+    {
+        var client = new MessageBrokerClient(new MessageBrokerConfig
+        {
+            Url                    = _brokerUrl,
+            AutoReconnect          = true,
+            PingIntervalSeconds    = 30,
+            HeartbeatTimeoutSeconds = 45,
+            MaxReconnectAttempts   = 0,
+            EnableVerboseLogging   = true
+        });
+
+        await client.SubscribeAsync(topic, async (message) =>
+        {
+            try
+            {
+                var approval = JsonSerializer.Deserialize<ApprovalMessage>(message, _jsonOptions);
+                if (approval is null) return;
+
+                _logger.LogInformation("Mensaje recibido del topic '{Topic}': RequestId={RequestId}", topic, approval.RequestId);
+                await handler(approval);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error procesando mensaje del topic '{Topic}'.", topic);
+            }
+        }, cancellationToken);
+    }
+
+    // ─── PUBLISH ──────────────────────────────────────────────────────────────
+
+    public async Task PublishAsync(string topic, ApprovalMessage message, CancellationToken cancellationToken)
+    {
+        var client = new MessageBrokerClient(new MessageBrokerConfig
+        {
+            Url                    = _brokerUrl,
+            AutoReconnect          = true,
+            PingIntervalSeconds    = 30,
+            HeartbeatTimeoutSeconds = 45,
+            MaxReconnectAttempts   = 0,
+            EnableVerboseLogging   = true
+        });
+
+        var json = JsonSerializer.Serialize(message);
+        await client.PublishAsync(topic, json, cancellationToken);
+
+        _logger.LogInformation("Mensaje publicado en topic '{Topic}': RequestId={RequestId}", topic, message.RequestId);
+    }
+}

@@ -251,3 +251,43 @@ public class PendingRequest
     public bool RequestEnabled { get; set; }
     public string StateName { get; set; } = string.Empty;
 }
+
+
+private async Task RunPeriodicPollingAsync(CancellationToken stoppingToken)
+{
+    while (!stoppingToken.IsCancellationRequested)
+    {
+        try
+        {
+            await Task.Delay(_interval, stoppingToken);
+
+            _logger.LogInformation("Revisión periódica iniciada.");
+
+            var pendientes = await _approvalService.GetPendientesAsync();
+
+            foreach (var request in pendientes)
+            {
+                _logger.LogInformation(
+                    "Procesando pendiente — RequestId={RequestId} UserId={UserId}",
+                    request.RequestId, request.UserId);
+
+                var nombre = string.IsNullOrWhiteSpace(request.RequestName)
+                    ? request.RequestDescription
+                    : request.RequestName;
+
+                await _approvalService.ProcesarRequestAsync(
+                    request.RequestId,
+                    request.UserId,
+                    nombre);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            break;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error durante la revisión periódica.");
+        }
+    }
+}

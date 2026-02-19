@@ -38,3 +38,13 @@ public class ApprovalMessage
 }
 
 
+
+namespace ApprovalWorker.Messaging;
+
+public interface IMessageBroker
+{
+    Task SubscribeAsync(string topic, Func<ApprovalMessage, Task> handler, CancellationToken cancellationToken);
+    Task PublishAsync(string topic, ApprovalMessage message, CancellationToken cancellationToken);
+}
+
+

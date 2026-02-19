@@ -426,3 +426,47 @@ public class Worker : BackgroundService
         }
     }
 }
+
+using ApprovalWorker;
+using ApprovalWorker.Data;
+using ApprovalWorker.Messaging;
+using ApprovalWorker.Services;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+
+var host = Host.CreateDefaultBuilder(args)
+    .ConfigureServices((context, services) =>
+    {
+        // ─── CONFIGURACIÓN ────────────────────────────────────────────────────
+
+        var configuration = context.Configuration;
+
+        // ─── DATA ─────────────────────────────────────────────────────────────
+
+        services.AddSingleton<SqlConnectionFactory>();
+
+        // ─── SERVICES ─────────────────────────────────────────────────────────
+
+        services.AddScoped<RequestApprovalService>();
+
+        // ─── MESSAGING ────────────────────────────────────────────────────────
+
+        services.AddHttpClient<HttpPollingBroker>(client =>
+        {
+            var brokerUrl = configuration["Broker:Url"]
+                ?? throw new InvalidOperationException("Broker:Url no configurado.");
+
+            client.BaseAddress = new Uri(brokerUrl);
+            client.Timeout     = TimeSpan.FromSeconds(10);
+        });
+
+        services.AddSingleton<IMessageBroker, HttpPollingBroker>();
+
+        // ─── WORKER ───────────────────────────────────────────────────────────
+
+        services.AddHostedService<Worker>();
+    })
+    .Build();
+
+await host.RunAsync();
+

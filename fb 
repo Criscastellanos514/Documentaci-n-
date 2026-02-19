@@ -416,3 +416,27 @@ public static class Program
         await host.RunAsync();
     }
 }
+
+
+private readonly IServiceScopeFactory _scopeFactory;
+
+public Worker(
+    ILogger<Worker> logger,
+    IConfiguration config,
+    SqlConnectionFactory factory,
+    IServiceScopeFactory scopeFactory)
+{
+    _logger = logger;
+    _config = config;
+    _factory = factory;
+    _scopeFactory = scopeFactory;
+}
+
+
+using (var scope = _scopeFactory.CreateScope())
+{
+    var approvalService = scope.ServiceProvider
+        .GetRequiredService<RequestApprovalService>();
+
+    await approvalService.TuMetodoAsync();
+}

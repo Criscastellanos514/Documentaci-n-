@@ -260,3 +260,104 @@ var host = Host.CreateDefaultBuilder(args)
     .Build();
 
 await host.RunAsync();
+
+
+
+
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+// 👇 Ajusta estos using según tus namespaces reales (por tus fotos, así están)
+using PruebaWorker.Data;
+using PruebaWorker.Services;
+
+namespace PruebaWorker;
+
+public static class Program
+{
+    public static async Task Main(string[] args)
+    {
+        var host = Host.CreateDefaultBuilder(args)
+            .ConfigureLogging(logging =>
+            {
+                logging.ClearProviders();
+                logging.AddSimpleConsole(o =>
+                {
+                    o.SingleLine = true;
+                    o.TimestampFormat = "HH:mm:ss ";
+                });
+                logging.SetMinimumLevel(LogLevel.Information);
+            })
+            .ConfigureServices((context, services) =>
+            {
+                // 1) Validación rápida de Connection String (para fallar temprano y claro)
+                ValidateConfiguration(context.Configuration);
+
+                // 2) Inyección de dependencias base
+                services.AddSingleton<SqlConnectionFactory>();
+
+                // 3) Servicio de aprobaciones (tu clase real)
+                services.AddScoped<RequestApprovalService>();
+
+                // 4) Broker:
+                //    - Si todavía NO tienes un broker real, este NoOp evita errores de DI.
+                //    - Cuando tengas el broker real, reemplaza esta línea por tu implementación.
+                services.AddSingleton<IMessageBroker, NoOpMessageBroker>();
+
+                // 5) Worker (BackgroundService)
+                services.AddHostedService<Worker>();
+            })
+            .Build();
+
+        await host.RunAsync();
+    }
+
+    private static void ValidateConfiguration(IConfiguration config)
+    {
+        var cs = config.GetConnectionString("Default");
+        if (string.IsNullOrWhiteSpace(cs))
+        {
+            throw new InvalidOperationException(
+                "Falta ConnectionStrings:Default en appsettings.json. " +
+                "Ejemplo:\n" +
+                "\"ConnectionStrings\": { \"Default\": \"Server=...;Database=...;User Id=...;Password=...;TrustServerCertificate=True;\" }"
+            );
+        }
+
+        // Validaciones opcionales (por defecto si no existen)
+        _ = config.GetValue<int?>("Worker:IntervalSeconds");
+        _ = config.GetValue<bool?>("Worker:DryRun");
+        _ = config.GetValue<int?>("Worker:BatchSize");
+    }
+}
+
+
+// =====================================================
+// ✅ Broker mínimo para que el Worker NO falle por DI
+// =====================================================
+public interface IMessageBroker
+{
+    Task PublishAsync(string message, CancellationToken ct = default);
+}
+
+public sealed class NoOpMessageBroker : IMessageBroker
+{
+    private readonly ILogger<NoOpMessageBroker> _logger;
+
+    public NoOpMessageBroker(ILogger<NoOpMessageBroker> logger)
+    {
+        _logger = logger;
+    }
+
+    public Task PublishAsync(string message, CancellationToken ct = default)
+    {
+        // Solo loguea; NO envía nada.
+        _logger.LogInformation("[BROKER:NOOP] Mensaje (simulado): {Message}", message);
+        return Task.CompletedTask;
+    }
+}

@@ -60,3 +60,11 @@ FROM control_inventario_til.dbo.request_approvals
 WHERE approval_date IS NULL
 GROUP BY state_entity_id
 ORDER BY pendientes_por_fecha DESC;
+
+
+SELECT TOP 1
+    request_id AS RequestId,
+    user_id AS UserId
+FROM control_inventario_til.dbo.request_approvals
+WHERE state_entity_id = 'A21A759F-CB89-44FE-A54D-E31B6178E68F'
+FOR JSON PATH, WITHOUT_ARRAY_WRAPPER;

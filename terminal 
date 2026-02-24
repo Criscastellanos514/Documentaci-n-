@@ -103,3 +103,13 @@ WHERE r.state_entity_id = @EstadoPendiente
   AND r.request_enabled = 1
 ORDER BY r.create_at ASC;
 ";
+
+
+SELECT TOP (@BatchSize)
+    r.request_id        AS RequestId,
+    r.user_id           AS UserId,
+    r.state_entity_id   AS StateEntityId,
+    r.create_at         AS CreateAt
+FROM dbo.request_approvals r
+WHERE r.state_entity_id = @EstadoPendiente
+ORDER BY r.create_at ASC

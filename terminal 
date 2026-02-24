@@ -8,3 +8,8 @@
   "CreatedAt": "2026-02-18T16:30:00Z",
   "ModifyAt": null
 }
+
+SELECT TOP 5 *
+FROM control_inventario_til.dbo.request_approvals
+WHERE approval_date IS NULL
+ORDER BY create_at DESC;

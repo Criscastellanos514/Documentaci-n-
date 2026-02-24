@@ -78,3 +78,28 @@ ORDER BY create_at ASC;
 SELECT request_id, state_entity_id, approval_date
 FROM control_inventario_til.dbo.request_approvals
 WHERE state_entity_id = 'A21A759F-CB89-44FE-A54D-E31B6178E68F';
+
+
+SELECT TOP (10)
+    r.request_id      AS RequestId,
+    r.user_id         AS UserId,
+    r.state_entity_id AS StateEntityId,
+    r.create_at       AS CreateAt
+FROM control_inventario_ti.dbo.requests r
+WHERE r.state_entity_id = 'A21A759F-CB89-44FE-A54D-E31B6178E68F'
+  AND r.request_enabled = 1
+ORDER BY r.create_at ASC;
+
+
+
+const string sql = @"
+SELECT TOP (@BatchSize)
+    r.request_id      AS RequestId,
+    r.user_id         AS UserId,
+    r.state_entity_id AS StateEntityId,
+    r.create_at       AS CreateAt
+FROM dbo.requests r
+WHERE r.state_entity_id = @EstadoPendiente
+  AND r.request_enabled = 1
+ORDER BY r.create_at ASC;
+";

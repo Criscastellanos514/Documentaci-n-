@@ -113,3 +113,18 @@ SELECT TOP (@BatchSize)
 FROM dbo.request_approvals r
 WHERE r.state_entity_id = @EstadoPendiente
 ORDER BY r.create_at ASC
+ORDER
+
+
+
+SELECT COUNT(1)
+FROM dbo.request_approvals
+WHERE request_id      = @RequestId
+  AND state_entity_id = @EstadoPendiente
+
+
+
+UPDATE dbo.request_approvals
+SET state_entity_id = @EstadoEnRevision,
+    modify_at       = @ModifyAt
+WHERE request_id = @RequestId

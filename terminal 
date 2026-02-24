@@ -22,3 +22,9 @@ ORDER BY create_at DESC;
 SELECT request_id, state_entity_id, approval_date
 FROM control_inventario_til.dbo.request_approvals
 WHERE approval_date IS NULL;
+
+
+{
+  "RequestId": "55582C3B-7ED7-4830-8509-D708B7F1C50A",
+  "UserId": "930D10FC-8C14-460F-9C5E-D15B2049E570"
+}

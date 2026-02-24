@@ -68,3 +68,9 @@ SELECT TOP 1
 FROM control_inventario_til.dbo.request_approvals
 WHERE state_entity_id = 'A21A759F-CB89-44FE-A54D-E31B6178E68F'
 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER;
+
+
+SELECT TOP (10) request_id, user_id
+FROM control_inventario_til.dbo.request_approvals
+WHERE state_entity_id = 'A21A759F-CB89-44FE-A54D-E31B6178E68F'
+ORDER BY create_at ASC;

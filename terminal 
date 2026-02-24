@@ -18,3 +18,7 @@ ORDER BY create_at DESC;
   "RequestId": "PEGA_EL_request_id_QUE_SALIO",
   "UserId": "PEGA_EL_user_id_CORRESPONDIENTE"
 }
+
+SELECT request_id, state_entity_id, approval_date
+FROM control_inventario_til.dbo.request_approvals
+WHERE approval_date IS NULL;

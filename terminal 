@@ -43,3 +43,20 @@ SELECT TOP 10
 FROM control_inventario_til.dbo.request_approvals
 WHERE state_entity_id = '1701686C-649B-4560-AC69-D307D5E7F728'
 ORDER BY create_at DESC;
+
+
+SELECT
+  state_entity_id,
+  COUNT(*) AS total
+FROM control_inventario_til.dbo.request_approvals
+GROUP BY state_entity_id
+ORDER BY total DESC;
+
+
+SELECT
+  state_entity_id,
+  COUNT(*) AS pendientes_por_fecha
+FROM control_inventario_til.dbo.request_approvals
+WHERE approval_date IS NULL
+GROUP BY state_entity_id
+ORDER BY pendientes_por_fecha DESC;

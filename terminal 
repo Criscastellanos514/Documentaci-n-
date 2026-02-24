@@ -33,3 +33,13 @@ WHERE approval_date IS NULL;
 SELECT DISTINCT state_entity_id
 FROM control_inventario_til.dbo.request_approvals
 WHERE approval_date IS NULL;
+
+SELECT TOP 10
+    request_id,
+    user_id,
+    state_entity_id,
+    approval_date,
+    create_at
+FROM control_inventario_til.dbo.request_approvals
+WHERE state_entity_id = '1701686C-649B-4560-AC69-D307D5E7F728'
+ORDER BY create_at DESC;

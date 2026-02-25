@@ -128,3 +128,18 @@ UPDATE dbo.request_approvals
 SET state_entity_id = @EstadoEnRevision,
     modify_at       = @ModifyAt
 WHERE request_id = @RequestId
+
+
+
+SELECT 
+    se.state_entity_id,
+    s.state_name,
+    e.entity_name
+FROM dbo.state_entities se
+JOIN dbo.states s   ON s.state_id = se.state_id
+JOIN dbo.entities e ON e.entity_id = se.entity_id
+WHERE se.state_entity_id IN (
+'F27EF7A8-793B-4237-AA99-20E39A51D785',
+'1B993444-0E62-4414-9E37-62030A154761',
+'1701686C-649B-4560-BC69-D307D5E7F728'
+);

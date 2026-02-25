@@ -244,3 +244,11 @@ INNER JOIN dbo.state_entities se ON se.state_entity_id = ra.state_entity_id
 INNER JOIN dbo.states s ON s.state_id = se.state_id
 INNER JOIN dbo.entities e ON e.entity_id = se.entity_id
 WHERE e.entity_name = 'Request'
+
+
+SELECT DISTINCT r.state_entity_id, s.state_name
+FROM dbo.requests r
+INNER JOIN dbo.state_entities se ON se.state_entity_id = r.state_entity_id
+INNER JOIN dbo.states s ON s.state_id = se.state_id
+INNER JOIN dbo.entities e ON e.entity_id = se.entity_id
+WHERE e.entity_name = 'Request'

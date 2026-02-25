@@ -143,3 +143,30 @@ WHERE se.state_entity_id IN (
 '1B993444-0E62-4414-9E37-62030A154761',
 '1701686C-649B-4560-BC69-D307D5E7F728'
 );
+
+
+public async Task<IEnumerable<PendingRequest>> GetPendientesAsync()
+{
+    const string sql = """
+        SELECT TOP (@BatchSize)
+            r.request_id AS RequestId,
+            r.user_id AS UserId,
+            r.state_entity_id AS StateEntityId,
+            r.create_at AS CreateAt
+        FROM dbo.requests r
+        WHERE r.state_entity_id = @EstadoPendiente
+          AND r.request_enabled = 1
+        ORDER BY r.create_at ASC
+    """;
+
+    using var connection = _connectionFactory.CreateConnection();
+
+    var results = await connection.QueryAsync<PendingRequest>(sql, new
+    {
+        BatchSize = _batchSize,
+        EstadoPendiente = _estadoPendiente
+    });
+
+    _logger.LogInformation("Requests pendientes encontradas: {Count}", results.Count());
+    return results;
+}

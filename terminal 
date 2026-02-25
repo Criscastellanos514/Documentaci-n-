@@ -252,3 +252,24 @@ INNER JOIN dbo.state_entities se ON se.state_entity_id = r.state_entity_id
 INNER JOIN dbo.states s ON s.state_id = se.state_id
 INNER JOIN dbo.entities e ON e.entity_id = se.entity_id
 WHERE e.entity_name = 'Request'
+
+
+
+SELECT TOP (@BatchSize)
+    r.request_id      AS RequestId,
+    r.user_id         AS UserId,
+    r.state_entity_id AS StateEntityId,
+    r.create_at       AS CreateAt
+FROM dbo.requests r
+WHERE r.state_entity_id = @EstadoPendiente
+ORDER BY r.create_at ASC
+
+
+UPDATE dbo.requests
+SET state_entity_id = @EstadoEnRevision,
+    modify_at = GETDATE()
+WHERE request_id = @RequestId
+  AND state_entity_id = @EstadoPendiente
+
+INSERT INTO dbo.request_approvals (request_id, user_id, state_entity_id, create_at)
+VALUES (@RequestId, @UserId, @EstadoEnRevision, GETDATE())

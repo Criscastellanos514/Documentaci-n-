@@ -279,3 +279,9 @@ SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE
 FROM INFORMATION_SCHEMA.COLUMNS
 WHERE TABLE_NAME = 'request_approvals'
 ORDER BY ORDINAL_POSITION
+
+INSERT INTO dbo.request_approvals 
+    (request_approval_id, request_id, user_id, state_entity_id, create_at)
+VALUES 
+    (NEWID(), @RequestId, @UserId, @EstadoEnRevision, GETDATE())
+

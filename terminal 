@@ -216,3 +216,9 @@ SELECT r.request_id, r.state_entity_id, se.state_entity_id
 FROM dbo.requests r
 INNER JOIN dbo.request_approvals ra ON ra.request_id = r.request_id
 WHERE ra.state_entity_id = '1701686C-649B-4560-BC69-D307D5E7F728'
+
+SELECT r.request_id, r.state_entity_id, ra.state_entity_id
+FROM dbo.requests r
+INNER JOIN dbo.request_approvals ra ON ra.request_id = r.request_id
+WHERE ra.state_entity_id = '1701686C-649B-4560-BC69-D307D5E7F728'
+

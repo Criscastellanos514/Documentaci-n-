@@ -273,3 +273,9 @@ WHERE request_id = @RequestId
 
 INSERT INTO dbo.request_approvals (request_id, user_id, state_entity_id, create_at)
 VALUES (@RequestId, @UserId, @EstadoEnRevision, GETDATE())
+
+
+SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = 'request_approvals'
+ORDER BY ORDINAL_POSITION

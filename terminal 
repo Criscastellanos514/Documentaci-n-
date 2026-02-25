@@ -222,3 +222,17 @@ FROM dbo.requests r
 INNER JOIN dbo.request_approvals ra ON ra.request_id = r.request_id
 WHERE ra.state_entity_id = '1701686C-649B-4560-BC69-D307D5E7F728'
 
+
+-- Cuántos hay en request_approvals con estado pendiente
+SELECT COUNT(*) 
+FROM dbo.request_approvals
+WHERE state_entity_id = '1701686C-649B-4560-BC69-D307D5E7F728'
+
+-- Verifica si esos request_id existen en requests
+SELECT COUNT(*)
+FROM dbo.request_approvals ra
+WHERE ra.state_entity_id = '1701686C-649B-4560-BC69-D307D5E7F728'
+AND NOT EXISTS (
+    SELECT 1 FROM dbo.requests r 
+    WHERE r.request_id = ra.request_id
+)

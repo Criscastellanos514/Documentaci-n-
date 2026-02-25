@@ -200,3 +200,9 @@ public async Task MarcarEnRevisionAsync(Guid requestId)
     else
         _logger.LogWarning("RequestId={RequestId} no fue actualizada. Estado no coincide.", requestId);
 }
+
+
+UPDATE dbo.requests
+SET state_entity_id = 'F27EF7A8-793B-4237-AA99-20E394510785'
+WHERE request_id = '7B3E0265-5170-4CD1-AFFC-D19916499A9D'
+AND state_entity_id = '1701686C-649B-4560-BC69-D307D5E7F728';

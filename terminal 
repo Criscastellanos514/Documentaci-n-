@@ -170,3 +170,33 @@ public async Task<IEnumerable<PendingRequest>> GetPendientesAsync()
     _logger.LogInformation("Requests pendientes encontradas: {Count}", results.Count());
     return results;
 }
+
+public async Task MarcarEnRevisionAsync(Guid requestId)
+{
+    if (_dryRun)
+    {
+        _logger.LogWarning("[DryRun] Omitiendo cambio de estado para RequestId={RequestId}", requestId);
+        return;
+    }
+
+    const string sql = @"
+    UPDATE dbo.requests
+    SET state_entity_id = @EstadoEnRevision,
+        modify_at = GETDATE()
+    WHERE request_id = @RequestId
+      AND state_entity_id = @EstadoPendiente;";
+
+    using var connection = _connectionFactory.CreateConnection();
+
+    var rows = await connection.ExecuteAsync(sql, new
+    {
+        RequestId = requestId,
+        EstadoEnRevision = _estadoEnRevision,
+        EstadoPendiente = _estadoPendiente
+    });
+
+    if (rows > 0)
+        _logger.LogInformation("RequestId={RequestId} → En revisión", requestId);
+    else
+        _logger.LogWarning("RequestId={RequestId} no fue actualizada. Estado no coincide.", requestId);
+}

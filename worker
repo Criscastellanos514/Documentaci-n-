@@ -122,3 +122,21 @@ var host = Host.CreateDefaultBuilder(args)
     .Build();
 
 await host.RunAsync();
+
+
+
+// Publicar al MessageBroker para que el worker lo procese
+var brokerConfig = new MessageBrokerConfig
+{
+    ServerUrl = "ws://166.178.5.148:9100/ws"
+};
+
+using var client = new MessageBrokerClient(brokerConfig);
+await client.ConnectAsync();
+await client.PublishAsyncTo("request_approval", new ApprovalMessage
+{
+    RequestId = Request.Base_id,
+    UserId = Request.User_id,
+    StateEntityId = Guid.Parse("1701686C-649B-4560-BC69-D307D5E7F728")
+});
+await client.DisconnectAsync();

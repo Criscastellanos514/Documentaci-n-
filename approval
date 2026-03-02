@@ -33,3 +33,9 @@ catch (Exception ex)
 
 await client.PublishAsyncTo<ApprovalMessage>("request_approval", new ApprovalMessage
 
+public string RequestApprovalType { get; set; } = string.Empty;
+public DateTimeOffset? ApprovalDate { get; set; }
+
+
+public string RequestApprovalType { get; set; } = string.Empty;
+public DateTimeOffset? ApprovalDate { get; set; }

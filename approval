@@ -64,3 +64,26 @@ public class ApprovalMessage
     public string RequestApprovalType { get; set; } = string.Empty;
     public DateTimeOffset? ApprovalDate { get; set; }
 }
+
+var brokerConfig = new MessageBrokerConfig
+{
+    ServerUrl = "ws://166.178.5.148:9100/ws"
+};
+
+using var client = new MessageBrokerClient(brokerConfig);
+await client.ConnectAsync();
+
+foreach (var a in approvals)
+{
+    await client.PublishAsyncTo<ApprovalMessage>("request_approval", new ApprovalMessage
+    {
+        RequestId = Request.Base_id,
+        UserId = a.ApprovalsUserAuto.User_id,
+        StateEntityId = a.state_entity_id,
+        RequestApprovalType = a.request_approval_type,
+        ApprovalDate = a.approval_date
+    });
+}
+
+await client.DisconnectAsync();
+

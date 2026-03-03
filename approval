@@ -103,3 +103,5 @@ await MarcarEnRevisionAsync(requestId, userId, requestApprovalType, approvalDate
 public async Task ProcesarRequestAsync(Guid requestId, Guid userId, string requestName, string requestApprovalType, DateTimeOffset? approvalDate)
 
 _logger.LogInformation("RequestId={RequestId} En revision", requestId);
+
+_logger.LogInformation("RequestId={RequestId} En revision", requestId);

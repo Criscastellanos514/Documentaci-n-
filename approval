@@ -87,3 +87,18 @@ foreach (var a in approvals)
 
 await client.DisconnectAsync();
 
+public async Task MarcarEnRevisionAsync(Guid requestId, Guid userId, string requestApprovalType, DateTimeOffset? approvalDate)
+
+INSERT INTO dbo.request_approvals
+    (request_approval_id, request_id, user_id, state_entity_id, request_approval_type, approval_date, create_at)
+VALUES
+    (NEWID(), @RequestId, @UserId, @EstadoEnRevision, @RequestApprovalType, @ApprovalDate, GETDATE())
+
+RequestApprovalType = requestApprovalType,
+ApprovalDate = approvalDate
+
+
+await MarcarEnRevisionAsync(requestId, userId, requestApprovalType, approvalDate);
+
+public async Task ProcesarRequestAsync(Guid requestId, Guid userId, string requestName, string requestApprovalType, DateTimeOffset? approvalDate)
+

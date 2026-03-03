@@ -105,3 +105,7 @@ public async Task ProcesarRequestAsync(Guid requestId, Guid userId, string reque
 _logger.LogInformation("RequestId={RequestId} En revision", requestId);
 
 _logger.LogInformation("RequestId={RequestId} En revision", requestId);
+
+
+_logger.LogInformation("RequestId:{requestId} En Revisión", requestId);
+_logger.LogWarning("RequestId:{requestId} no fue actualizada. Estado no coincide.", requestId);

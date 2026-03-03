@@ -118,3 +118,13 @@ else
 {
     _logger.LogWarning("RequestId:{requestId} no fue actualizada. Estado no coincide.", requestId);
 }
+
+if (rows > 0)
+{
+    _logger.LogInformation("RequestId:{requestId} En Revisión", requestId);
+}
+else
+{
+    _logger.LogWarning("RequestId:{requestId} no fue actualizada. Estado no coincide.", requestId);
+}
+

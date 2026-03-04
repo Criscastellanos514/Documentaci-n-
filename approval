@@ -128,3 +128,167 @@ else
     _logger.LogWarning("RequestId:{requestId} no fue actualizada. Estado no coincide.", requestId);
 }
 
+
+
+
+using ApprovalWorker.Messaging;
+using Dapper;
+using Microsoft.Extensions.Logging;
+
+namespace ApprovalWorker.Services;
+
+public class RequestApprovalService
+{
+    private readonly ILogger<RequestApprovalService> _logger;
+    private readonly SqlConnectionFactory _connectionFactory;
+    private readonly bool _dryRun;
+    private readonly Guid _estadoPendiente;
+    private readonly Guid _estadoEnRevision;
+
+    public RequestApprovalService(
+        ILogger<RequestApprovalService> logger,
+        SqlConnectionFactory connectionFactory,
+        IConfiguration configuration,
+        bool dryRun = false)
+    {
+        _logger = logger;
+        _connectionFactory = connectionFactory;
+        _dryRun = dryRun;
+        _estadoPendiente = Guid.Parse(configuration["States:Pendiente"]);
+        _estadoEnRevision = Guid.Parse(configuration["States:EnRevision"]);
+    }
+
+    // ---- GET PENDIENTES ----
+    public async Task<List<ApprovalMessage>> GetPendientesAsync()
+    {
+        const string sql = """
+            SELECT request_id AS RequestId,
+                   user_id AS UserId,
+                   state_entity_id AS StateEntityId
+            FROM dbo.requests
+            WHERE state_entity_id = @EstadoPendiente
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<ApprovalMessage>(sql, new
+        {
+            EstadoPendiente = _estadoPendiente
+        });
+
+        _logger.LogInformation("Requests pendientes encontradas: {Count}", results.Count());
+        return results.ToList();
+    }
+
+    // ---- EXISTE Y ESTA PENDIENTE ----
+    public async Task<bool> ExisteYEstaPendienteAsync(Guid requestId)
+    {
+        const string sql = """
+            SELECT COUNT(1)
+            FROM dbo.requests
+            WHERE request_id = @RequestId
+              AND state_entity_id = @EstadoPendiente
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var count = await connection.ExecuteScalarAsync<int>(sql, new
+        {
+            RequestId = requestId,
+            EstadoPendiente = _estadoPendiente
+        });
+
+        return count > 0;
+    }
+
+    // ---- PROCESAR REQUEST ----
+    public async Task ProcesarRequestAsync(Guid requestId, Guid userId, string requestName, string requestApprovalType, DateTimeOffset? approvalDate)
+    {
+        _logger.LogInformation(
+            "Procesando RequestId={RequestId} UserId={UserId} Nombre={RequestName}",
+            requestId, userId, requestName);
+
+        if (_dryRun)
+        {
+            _logger.LogWarning("[DryRun] Omitiendo escritura para RequestId={RequestId}", requestId);
+            return;
+        }
+
+        var existe = await ExisteYEstaPendienteAsync(requestId);
+
+        if (!existe)
+        {
+            _logger.LogWarning(
+                "RequestId={RequestId} no existe o ya no esta en estado Pendiente. Se omite.",
+                requestId);
+            return;
+        }
+
+        await MarcarEnRevisionAsync(requestId, userId, requestApprovalType, approvalDate);
+    }
+
+    // ---- MARCAR EN REVISION ----
+    public async Task MarcarEnRevisionAsync(Guid requestId, Guid userId, string requestApprovalType, DateTimeOffset? approvalDate)
+    {
+        if (_dryRun)
+        {
+            _logger.LogWarning("[DryRun] Omitiendo cambio de estado para RequestId={RequestId}", requestId);
+            return;
+        }
+
+        const string sql = """
+            UPDATE dbo.requests
+            SET state_entity_id = @EstadoEnRevision,
+                modify_at = GETDATE()
+            WHERE request_id = @RequestId
+              AND state_entity_id = @EstadoPendiente
+
+            INSERT INTO dbo.request_approvals
+                (request_approval_id, request_id, user_id, state_entity_id, request_approval_type, approval_date, create_at)
+            VALUES
+                (NEWID(), @RequestId, @UserId, @EstadoEnRevision, @RequestApprovalType, @ApprovalDate, GETDATE())
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var rows = await connection.ExecuteAsync(sql, new
+        {
+            RequestId = requestId,
+            UserId = userId,
+            EstadoEnRevision = _estadoEnRevision,
+            EstadoPendiente = _estadoPendiente,
+            RequestApprovalType = requestApprovalType,
+            ApprovalDate = approvalDate
+        });
+
+        if (rows > 0)
+            _logger.LogInformation("RequestId={RequestId} En revision", requestId);
+        else
+            _logger.LogWarning("RequestId={RequestId} no fue actualizado. Estado no coincide.", requestId);
+    }
+
+    // ---- MARCAR ESTADO GENERICO (Aprobado / Rechazado) ----
+    public async Task MarcarEstadoAsync(Guid requestId, Guid nuevoStateEntityId)
+    {
+        if (_dryRun)
+        {
+            _logger.LogWarning("[DryRun] Omitiendo cambio de estado para RequestId={RequestId}", requestId);
+            return;
+        }
+
+        const string sql = """
+            UPDATE dbo.requests
+            SET state_entity_id = @NuevoEstado,
+                modify_at = @ModifyAt
+            WHERE request_id = @RequestId
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        await connection.ExecuteAsync(sql, new
+        {
+            RequestId = requestId,
+            NuevoEstado = nuevoStateEntityId,
+            ModifyAt = DateTimeOffset.UtcNow
+        });
+
+        _logger.LogInformation("RequestId={RequestId} Estado={Estado}", requestId, nuevoStateEntityId);
+    }
+}
+

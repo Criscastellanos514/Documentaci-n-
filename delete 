@@ -10,3 +10,20 @@ CHECK CONSTRAINT FK_request_approvals_requests_request_id;
 SELECT *
 FROM request_approvals
 WHERE request_id = '37E21878-B68E-4695-8321-17338B2AD43F'
+
+
+SELECT *
+FROM [control_inventario_ti].[dbo].[request_approvals]
+WHERE request_id = '37E21878-B68E-4695-8321-17338B2AD43F';
+SELECT *
+FROM [control_inventario_ti].[dbo].[requests]
+WHERE request_id = '37E21878-B68E-4695-8321-17338B2AD43F';
+
+DELETE FROM [control_inventario_ti].[dbo].[request_approvals]
+WHERE request_id = '37E21878-B68E-4695-8321-17338B2AD43F';
+
+DELETE FROM [control_inventario_ti].[dbo].[requests]
+WHERE request_id = '37E21878-B68E-4695-8321-17338B2AD43F';
+
+DELETE FROM [control_inventario_ti].[dbo].[users]
+WHERE user_id = '37E21878-B68E-4695-8321-17338B2AD43F';

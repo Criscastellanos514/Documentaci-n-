@@ -6,3 +6,7 @@ WHERE user_id = '37E21878-B68E-4695-8321-17338B2AD43F';
 
 ALTER TABLE request_approvals
 CHECK CONSTRAINT FK_request_approvals_requests_request_id;
+
+SELECT *
+FROM request_approvals
+WHERE request_id = '37E21878-B68E-4695-8321-17338B2AD43F'

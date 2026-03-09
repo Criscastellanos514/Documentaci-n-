@@ -1,0 +1,8 @@
+ALTER TABLE request_approvals
+NOCHECK CONSTRAINT FK_request_approvals_requests_request_id;
+
+DELETE FROM [control_inventario_ti].[dbo].[users]
+WHERE user_id = '37E21878-B68E-4695-8321-17338B2AD43F';
+
+ALTER TABLE request_approvals
+CHECK CONSTRAINT FK_request_approvals_requests_request_id;
